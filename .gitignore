@@ -1,0 +1,14 @@
+Include/
+Lib/
+pyvenv.cfg
+algae_env/
+venv/
+env/
+.venv/
+__pycache__/
+*.pyc
+*.pyo
+.vscode/
+.idea/
+.DS_Store
+Thumbs.db
