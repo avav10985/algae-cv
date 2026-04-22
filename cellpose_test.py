@@ -5,6 +5,10 @@ CellPose 測試腳本 — 用預訓練模型偵測藻類細胞
     pip install cellpose matplotlib
 
 使用：
+    D:
+    cd D:\Algaeorithm-pilot_backend
+    venv\Scripts\activate
+    python cellpose_test.py "D:/藻類比賽/資料/0102下-20260324T225901Z-3-001/0102下/20260102144751.jpg" --scale 0.5
     python cellpose_test.py <image_path>
     python cellpose_test.py "D:/藻類比賽/資料/0102下-20260324T225901Z-3-001/0102下/20260102144751.jpg"
 
