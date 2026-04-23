@@ -1,0 +1,28 @@
+# 1. 安裝 Cellpose
+!pip install cellpose
+
+# 2. 掛載你的 Google Drive
+from google.colab import drive
+drive.mount('/content/drive')
+
+# 3. 匯入 Cellpose 並檢查 GPU
+import torch
+from cellpose import models, io
+print(f"是否使用 GPU: {torch.cuda.is_available()}")
+# 4. 執行預測
+# 注意：在新版本中，通常直接使用 Cellpose 類別
+#model = models.Cellpose(gpu=True, model_type='cyto')
+
+# 如果上面的行還是報錯，請嘗試換成下面這行：
+model = models.CellposeModel(gpu=True, model_type='cyto')
+
+image_path = '/content/drive/MyDrive/0102下/20260102144751.jpg'
+
+# 讀取並執行
+img = io.imread(image_path)
+# 這樣不管它回傳 3 個還是 4 個都不會報錯
+masks, flows, styles, *others = model.eval(img, diameter=None, channels=[0,0])
+
+# 儲存結果到雲端硬碟（會產生一個 _seg.npy 檔案）
+io.save_masks(img, masks, flows, image_path)
+print("處理成功！你可以在雲端硬碟的資料夾看到結果了。")

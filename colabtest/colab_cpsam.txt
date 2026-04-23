@@ -1,0 +1,222 @@
+═══════════════════════════════════════════════════════════
+  Colab 用 CellPose cpsam 模型 + 邊緣裁切版
+  每個 ═══ 分隔是一個獨立 Colab Cell
+═══════════════════════════════════════════════════════════
+
+
+═══════════ Cell 1：安裝 + 掛載 Drive + 檢查 GPU ═══════════
+
+# 安裝 cellpose（Colab 環境用）
+!pip install cellpose --quiet
+
+# 掛載 Google Drive
+from google.colab import drive
+drive.mount('/content/drive')
+
+# 檢查 GPU（應該顯示 True）
+import torch
+print(f"GPU 可用: {torch.cuda.is_available()}")
+if torch.cuda.is_available():
+    print(f"GPU 型號: {torch.cuda.get_device_name(0)}")
+
+
+═══════════ Cell 2：載入 cpsam 模型（v4 預設，最強） ═══════════
+
+from cellpose import models
+
+# 不指定 model_type 就是用 cpsam（v4 的預設模型，基於 SAM）
+# 第一次跑會下載 1.15 GB 模型權重，之後 session 裡快取
+model = models.CellposeModel(gpu=True)
+print("✅ cpsam 模型已載入")
+
+
+═══════════ Cell 3：設定圖片路徑 + 讀圖 + 裁邊 ═══════════
+
+import numpy as np
+from cellpose import io
+import matplotlib.pyplot as plt
+
+# ============ 參數 ============
+IMAGE_PATH = '/content/drive/MyDrive/0102下/20260102144751.jpg'
+CROP_MARGIN = 80        # 邊緣裁掉的像素數（移除格線邊框，可調 50-150）
+BORDER_FILTER = 15      # 偵測後，碰到邊界的 mask 直接丟掉（像素）
+# ==============================
+
+# 讀圖
+img = io.imread(IMAGE_PATH)
+print(f"原始尺寸: {img.shape}")
+
+# 裁邊：去掉上下左右各 CROP_MARGIN 像素
+h, w = img.shape[:2]
+img_cropped = img[CROP_MARGIN:h-CROP_MARGIN, CROP_MARGIN:w-CROP_MARGIN]
+print(f"裁邊後: {img_cropped.shape}")
+
+# 視覺化裁邊前後
+fig, axes = plt.subplots(1, 2, figsize=(16, 6))
+axes[0].imshow(img)
+axes[0].set_title(f"原始 ({img.shape[1]}×{img.shape[0]})")
+axes[0].axis('off')
+axes[1].imshow(img_cropped)
+axes[1].set_title(f"裁邊後 ({img_cropped.shape[1]}×{img_cropped.shape[0]})")
+axes[1].axis('off')
+plt.tight_layout()
+plt.show()
+
+
+═══════════ Cell 4：執行偵測（cpsam） ═══════════
+
+import time
+
+print("🔄 開始偵測... (GPU 上約 5-15 秒)")
+t0 = time.time()
+
+# cpsam 不需要 channels 參數
+masks, flows, styles, *_ = model.eval(img_cropped, diameter=None)
+
+elapsed = time.time() - t0
+n_before = int(masks.max())
+print(f"⏱️  耗時 {elapsed:.1f} 秒")
+print(f"📊 偵測到 {n_before} 顆細胞（過濾前）")
+
+
+═══════════ Cell 5：過濾掉碰到邊界的 mask（安全網） ═══════════
+
+# 雖然已經裁邊，但 cpsam 偶爾還是會把邊緣雜質當細胞
+# 這裡再過濾一次：移除任何碰到邊界的 mask
+
+mh, mw = masks.shape
+removed = 0
+for mask_id in range(1, masks.max() + 1):
+    ys, xs = np.where(masks == mask_id)
+    if len(ys) == 0:
+        continue
+    if (ys.min() < BORDER_FILTER or ys.max() > mh - BORDER_FILTER or
+        xs.min() < BORDER_FILTER or xs.max() > mw - BORDER_FILTER):
+        masks[masks == mask_id] = 0
+        removed += 1
+
+# 重新編號（讓 mask id 連續）
+from scipy import ndimage
+masks, _ = ndimage.label(masks > 0)
+n_after = int(masks.max())
+
+print(f"🗑️  移除碰邊界的 mask: {removed} 個")
+print(f"📊 最終細胞數: {n_after}")
+
+
+═══════════ Cell 6：視覺化結果（4 種視圖） ═══════════
+
+from cellpose import plot
+
+fig, axes = plt.subplots(2, 2, figsize=(18, 14))
+
+# 左上：原圖
+axes[0, 0].imshow(img_cropped)
+axes[0, 0].set_title("1. 原圖（裁邊後）", fontsize=14)
+axes[0, 0].axis('off')
+
+# 右上：輪廓疊加
+outlines = plot.outline_view(img_cropped, masks)
+axes[0, 1].imshow(outlines)
+axes[0, 1].set_title(f"2. 偵測輪廓（{n_after} 顆）", fontsize=14)
+axes[0, 1].axis('off')
+
+# 左下：彩色 mask
+axes[1, 0].imshow(masks, cmap='nipy_spectral')
+axes[1, 0].set_title("3. 每顆細胞不同顏色", fontsize=14)
+axes[1, 0].axis('off')
+
+# 右下：Mask 疊在原圖上
+overlay = plot.mask_overlay(img_cropped, masks)
+axes[1, 1].imshow(overlay)
+axes[1, 1].set_title("4. Mask 疊加", fontsize=14)
+axes[1, 1].axis('off')
+
+plt.tight_layout()
+plt.savefig('/content/drive/MyDrive/cellpose_result.jpg', dpi=120, bbox_inches='tight')
+plt.show()
+
+print(f"\n✅ 結果已存到 Google Drive: cellpose_result.jpg")
+
+
+═══════════ Cell 7：統計分析（可選） ═══════════
+
+# 算每顆細胞的面積，看分布
+import pandas as pd
+
+cell_areas = []
+for mask_id in range(1, masks.max() + 1):
+    area = (masks == mask_id).sum()
+    cell_areas.append(area)
+
+cell_areas = np.array(cell_areas)
+
+print("=== 細胞統計 ===")
+print(f"細胞數：{len(cell_areas)}")
+print(f"平均面積：{cell_areas.mean():.1f} 像素²")
+print(f"中位數：{np.median(cell_areas):.1f} 像素²")
+print(f"最小 / 最大：{cell_areas.min()} / {cell_areas.max()}")
+
+# 面積分布直方圖
+plt.figure(figsize=(10, 5))
+plt.hist(cell_areas, bins=30, edgecolor='black')
+plt.xlabel('面積（像素²）')
+plt.ylabel('細胞數')
+plt.title('細胞面積分布')
+plt.grid(alpha=0.3)
+plt.show()
+
+
+═══════════ Cell 8：批次處理多張圖（可選） ═══════════
+
+import os
+import glob
+
+# 改成你的資料夾路徑
+IMAGE_FOLDER = '/content/drive/MyDrive/0102下/'
+OUTPUT_FOLDER = '/content/drive/MyDrive/cellpose_results/'
+os.makedirs(OUTPUT_FOLDER, exist_ok=True)
+
+image_files = sorted(glob.glob(os.path.join(IMAGE_FOLDER, '*.jpg')))
+print(f"找到 {len(image_files)} 張圖片")
+
+results = []
+for i, path in enumerate(image_files, 1):
+    fname = os.path.basename(path)
+    print(f"\n[{i}/{len(image_files)}] 處理 {fname}")
+
+    img = io.imread(path)
+    h, w = img.shape[:2]
+    img_c = img[CROP_MARGIN:h-CROP_MARGIN, CROP_MARGIN:w-CROP_MARGIN]
+
+    m, _, _, *_ = model.eval(img_c, diameter=None)
+
+    # 過濾邊界
+    mh, mw = m.shape
+    for mid in range(1, m.max() + 1):
+        ys, xs = np.where(m == mid)
+        if len(ys) == 0: continue
+        if (ys.min() < BORDER_FILTER or ys.max() > mh - BORDER_FILTER or
+            xs.min() < BORDER_FILTER or xs.max() > mw - BORDER_FILTER):
+            m[m == mid] = 0
+    m, _ = ndimage.label(m > 0)
+
+    count = int(m.max())
+    results.append({'file': fname, 'count': count})
+    print(f"  → {count} 顆細胞")
+
+# 輸出 CSV
+df = pd.DataFrame(results)
+csv_path = os.path.join(OUTPUT_FOLDER, 'cell_counts.csv')
+df.to_csv(csv_path, index=False)
+print(f"\n✅ 統計結果已存到 {csv_path}")
+print(df)
+
+
+═══════════════════════════════════════════════════════════
+  提示：
+  - Cell 1~7 是單張圖完整流程
+  - Cell 8 是批次處理（可選）
+  - 第一次 Cell 2 會下載 1.15 GB 模型，後續不用重下
+  - 可調參數：CROP_MARGIN（裁邊寬度）、BORDER_FILTER（過濾邊界寬度）
+═══════════════════════════════════════════════════════════

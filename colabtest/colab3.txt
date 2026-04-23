@@ -1,0 +1,16 @@
+import numpy as np
+import matplotlib.pyplot as plt
+
+# 檢查偵測到多少顆
+count = masks.max()
+print(f"偵測到的數量: {count}")
+
+if count > 0:
+    plt.figure(figsize=(10,10))
+    # 使用隨機配色讓 masks 變明顯
+    plt.imshow(masks, cmap='nipy_spectral')
+    plt.title("Detected Algae Masks")
+    plt.axis('off')
+    plt.show()
+else:
+    print("警告：完全沒有偵測到物體！請檢查圖片路徑或調小 diameter 參數。")

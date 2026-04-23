@@ -1,0 +1,4 @@
+cellpose
+matplotlib
+pillow
+opencv-python

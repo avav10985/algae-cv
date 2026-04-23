@@ -1,0 +1,22 @@
+import matplotlib.pyplot as plt
+from cellpose import plot, io
+
+# 讀取剛剛處理的照片
+img = io.imread(image_path)
+
+# 繪製結果圖：左邊原圖，右邊圈選圖
+fig = plt.figure(figsize=(16,8))
+ax = fig.add_subplot(1, 2, 1)
+ax.imshow(img)
+ax.set_title("Original Image")
+
+ax = fig.add_subplot(1, 2, 2)
+# 畫出輪廓 (masks 是剛剛記憶體裡的變數)
+outlines = plot.outline_view(img, masks)
+ax.imshow(outlines)
+ax.set_title("Cellpose Outlines")
+
+plt.show()
+
+# 順便印出偵測到多少顆藻類
+print(f"偵測到的細胞/藻類數量: {masks.max()}")
