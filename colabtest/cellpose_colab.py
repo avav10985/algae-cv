@@ -31,8 +31,9 @@ from google.colab import drive
 # 要處理的圖片（單張）
 IMAGE_PATH = '/content/drive/MyDrive/0102下/20260102144751.jpg'
 
-# 模型選擇 — 可選 'cpsam'（預設，最強但會漏抓小細胞）或 'cyto3'（對小細胞較敏感）
-MODEL_TYPE = 'cyto3'
+# 模型選擇 — 'cpsam' 是 CellPose 4.x 唯一真正可用的模型
+# 註：cellpose 4.x 的 cyto3 / cyto / nuclei 等舊 model_type 參數會被靜默忽略
+MODEL_TYPE = 'cpsam'
 
 # 細胞直徑（像素）— 自動估計常常偏大，手動指定能抓到更多小細胞
 # None = 自動估計；或試 40, 45, 50（你的 Chlorella 看起來約 45 像素）
