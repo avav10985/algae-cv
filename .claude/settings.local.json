@@ -10,7 +10,9 @@
       "Read(//c/Users/maxbb/AppData/Local/cellpose/**)",
       "Bash(cp \"D:/藻類比賽/資料/0102下-20260324T225901Z-3-001/0102下/20260102144751.jpg\" d:/Algaeorithm-pilot_backend/cellpose_portable/test_images/sample1.jpg)",
       "Bash(cp \"D:/藻類比賽/資料/0102下-20260324T225901Z-3-001/0102下/20260102150738.jpg\" d:/Algaeorithm-pilot_backend/cellpose_portable/test_images/sample2.jpg)",
-      "Bash(cp \"D:/藻類比賽/資料/0102下-20260324T225901Z-3-001/0102下/20260102151444.jpg\" d:/Algaeorithm-pilot_backend/cellpose_portable/test_images/sample3.jpg)"
+      "Bash(cp \"D:/藻類比賽/資料/0102下-20260324T225901Z-3-001/0102下/20260102151444.jpg\" d:/Algaeorithm-pilot_backend/cellpose_portable/test_images/sample3.jpg)",
+      "Read(//c/Users/maxbb/.claude/projects/d--Algaeorithm-pilot-backend/**)",
+      "Bash(python export_conversation.py \"C:/Users/maxbb/.claude/projects/d--Algaeorithm-pilot-backend/8d23305e-c1c4-4d04-91da-2a20bda0de7c.jsonl\" conversation_backup.md)"
     ],
     "additionalDirectories": [
       "C:\\Users\\maxbb\\.cellpose\\models"

@@ -32,7 +32,7 @@ from google.colab import drive
 IMAGE_PATH = '/content/drive/MyDrive/0102下/20260102144751.jpg'
 
 # 模型選擇 — 可選 'cpsam'（預設，最強但會漏抓小細胞）或 'cyto3'（對小細胞較敏感）
-MODEL_TYPE = 'cpsam'
+MODEL_TYPE = 'cyto3'
 
 # 細胞直徑（像素）— 自動估計常常偏大，手動指定能抓到更多小細胞
 # None = 自動估計；或試 40, 45, 50（你的 Chlorella 看起來約 45 像素）
