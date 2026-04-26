@@ -24,14 +24,15 @@ drive.mount('/content/drive')
 #  設定
 # ============================================================
 # 訓練好的模型路徑（step3 訓練完會印出來）
-MODEL_PATH = '/content/drive/MyDrive/cellpose_train/models/my_cpsam_model'
+MODEL_PATH = '/content/drive/MyDrive/cellpose_train_A/models/my_cpsam_A'
 
 # 要處理的圖片資料夾
-IMAGE_FOLDER = '/content/drive/MyDrive/0102下/'
+IMAGE_FOLDER = '/content/drive/MyDrive/labeling/'
 
-# 結果輸出
-OUTPUT_CSV = '/content/drive/MyDrive/cell_counts_finetuned.csv'
-OUTPUT_IMAGES_DIR = '/content/drive/MyDrive/cellpose_results_finetuned/'
+# 結果輸出（CSV 跟結果圖放同一個資料夾）
+OUTPUT_DIR = '/content/drive/MyDrive/cellpose_results_finetuned/'
+OUTPUT_CSV = os.path.join(OUTPUT_DIR, 'cell_counts.csv')
+OUTPUT_IMAGES_DIR = OUTPUT_DIR
 
 # 偵測參數
 CELL_DIAMETER = 45
@@ -42,9 +43,13 @@ MIN_AREA = 100
 # ============================================================
 #  載入 fine-tuned 模型
 # ============================================================
+# 注意：cpsam 不能用 pretrained_model=path 載入，會被默默忽略。
+# 必須先建模型再用 load_state_dict 手動灌入訓練後的權重。
 print(f"載入 fine-tuned 模型：{MODEL_PATH}")
-model = models.CellposeModel(gpu=True, pretrained_model=MODEL_PATH)
-print("[OK] 模型載入完成")
+model = models.CellposeModel(gpu=True)
+state = torch.load(MODEL_PATH, map_location='cuda', weights_only=False)
+model.net.load_state_dict(state)
+print("[OK] 模型載入完成（手動 load_state_dict）")
 
 
 # ============================================================
