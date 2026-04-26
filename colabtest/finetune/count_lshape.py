@@ -163,12 +163,13 @@ def find_counting_square(h_lines, v_lines, img_shape, n_grid_squares=5):
 # ============================================================
 def apply_lshape(masks, bounds):
     """
-    回傳: dict with included/excluded/outside lists, and centroids
-    規則:
-      上邊算  → 上界 y >= top: include  (top <= cy)
-      下邊不算 → 下界 y < bottom (cy < bottom)
-      左邊不算 → cx > left
-      右邊算  → cx <= right
+    身體碰邊規則:
+      - 身體跟方框有交集才考慮
+      - 碰到「左邊」的線(任何像素 x == left) → 不算
+      - 碰到「下邊」的線(任何像素 y == bottom) → 不算
+      - 否則(完全在框內 / 只碰到上邊或右邊)→ 算
+
+    L-shape 標準寫法:include 邊算進去,exclude 邊不算。
     """
     top, bottom, left, right = bounds
     included, excluded, outside = [], [], []
@@ -181,18 +182,20 @@ def apply_lshape(masks, bounds):
         cy, cx = float(ys.mean()), float(xs.mean())
         centroids[mask_id] = (cy, cx)
 
-        in_y = (top <= cy < bottom)
-        in_x = (left < cx <= right)
+        # 身體是否與方框有交集?
+        in_box_pixels = (ys >= top) & (ys <= bottom) & (xs >= left) & (xs <= right)
+        if not in_box_pixels.any():
+            outside.append(mask_id)
+            continue
 
-        if in_y and in_x:
-            included.append(mask_id)
+        # 是否碰到 left 或 bottom 邊?
+        touches_left = (xs == left).any() or ((xs < left) & (ys >= top) & (ys <= bottom)).any()
+        touches_bottom = (ys == bottom).any() or ((ys > bottom) & (xs >= left) & (xs <= right)).any()
+
+        if touches_left or touches_bottom:
+            excluded.append(mask_id)
         else:
-            # 區分「框外」和「在框邊緣但被 L-rule 排除」
-            near_box = (top - 30 <= cy <= bottom + 30) and (left - 30 <= cx <= right + 30)
-            if near_box:
-                excluded.append(mask_id)
-            else:
-                outside.append(mask_id)
+            included.append(mask_id)
 
     return {
         'included': included,

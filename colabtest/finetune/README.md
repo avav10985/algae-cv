@@ -38,7 +38,11 @@ Step 3：Colab 上跑 fine-tune 腳本
 | `auto_label_colab.py` | Colab 批次自動標注（本機 GUI 之前先跑這個省時間）|
 | `split_train_test.py` | 把標好的 labeling_X/ 分成 train/test 並打包成 zip |
 | `step3_finetune.py` | **Step 3 Colab 訓練腳本** |
-| `step4_inference.py` | 用訓練好的模型做偵測 |
+| `step4_inference.py` | Step 4 用訓練好的模型做偵測（只算全部數）|
+| `count_lshape.py` | L-shape 規則計數核心模組（單張）|
+| `batch_lshape.py` | 本機批次:對已有 jpg + _seg.npy 的資料夾跑 L-shape |
+| `step5_lshape_inference.py` | **Step 5 Colab 一條龍**:cellpose + L-shape 規則 + CSV |
+| `step6_chamber_inference.py` | **Step 6 上下室完整計算**:up/down 子資料夾 + 濃度公式 + 平均/總計 |
 
 ## 標注規則對應
 
