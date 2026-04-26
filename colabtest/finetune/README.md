@@ -35,7 +35,16 @@ Step 3：Colab 上跑 fine-tune 腳本
 | `README.md` | 本檔（總覽） |
 | `step1_labeling_guide.md` | **Step 1 標注教學**（先看這個） |
 | `step2_upload_guide.md` | Step 2 怎麼把檔案上傳到 Drive |
+| `auto_label_colab.py` | Colab 批次自動標注（本機 GUI 之前先跑這個省時間）|
+| `split_train_test.py` | 把標好的 labeling_X/ 分成 train/test 並打包成 zip |
 | `step3_finetune.py` | **Step 3 Colab 訓練腳本** |
 | `step4_inference.py` | 用訓練好的模型做偵測 |
+
+## 標注規則對應
+
+| 資料夾 | 規則 |
+|---|---|
+| `labeling_A/` | 連在一起算 1 顆（整個分裂雙球當 1 個 mask）|
+| `labeling_B/` | 明顯兩球算 2 顆（分裂雙球各當 1 個 mask）|
 
 **建議順序：** 先讀 `step1_labeling_guide.md` → 動手標注 → 讀 step2 → 讀 step3 跑訓練。

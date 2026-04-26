@@ -12,3 +12,23 @@ __pycache__/
 .idea/
 .DS_Store
 Thumbs.db
+
+# 訓練資料(體積大,不該進 git)
+colabtest/*.zip
+colabtest/labeling_*/
+colabtest/cellpose_train_*/
+colabtest/auto_label_*/
+
+# 大型模型檔
+*.pt
+*.pth
+cellpose_portable/
+
+# 顯微鏡圖片資料
+*.jpg
+*.JPG
+*.jpeg
+*.png
+*.tif
+*.tiff
+*_seg.npy
