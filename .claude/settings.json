@@ -7,7 +7,14 @@
       "Bash(eas init *)",
       "Bash(eas build:configure --platform android --non-interactive)",
       "Bash(eas build:configure --help)",
-      "Bash(eas build *)"
+      "Bash(eas build *)",
+      "Bash(eas build:list --limit 3 --json)",
+      "Bash(eas build:view 71453d9e-bd83-4a1b-9b74-c1cecd11ce79)",
+      "Bash(eas build:view 71453d9e-bd83-4a1b-9b74-c1cecd11ce79 --json)",
+      "Bash(python -c \"import json,sys; d=json.loads\\(sys.stdin.read\\(\\)\\); print\\('Error:', d.get\\('error', {}\\)\\); print\\('Logs:', d.get\\('logFiles', []\\)[:1]\\)\")",
+      "WebFetch(domain:expo.dev)",
+      "Read(//d/藻類比賽/資料/0102下-20260324T225901Z-3-001/0102下//**)",
+      "Bash(venv/Scripts/python.exe -c ' *)"
     ]
   }
 }

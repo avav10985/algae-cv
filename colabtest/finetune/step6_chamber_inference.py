@@ -31,10 +31,11 @@ Step 6: 血球計數器(上室+下室)完整批次
 PARENT_FOLDER = '/content/drive/MyDrive/sample_2026_04_27/'   # ← 母資料夾
 MODEL_PATH    = '/content/drive/MyDrive/cellpose_train_A/models/my_cpsam_A'
 
-# 計數參數
-CELL_DIAMETER = 45         # cellpose 偵測直徑
-SQUARE_SIZE_PX = 640       # 1mm² 計數方格在這個放大率下的像素邊長
-SQUARE_SIZE_TOL = 30       # 方格尺寸容忍誤差
+# 計數參數(會依圖片解析度自動縮放)
+BASE_IMAGE_WIDTH = 1024    # 訓練/校正基準解析度寬度
+CELL_DIAMETER_BASE = 45    # 細胞直徑 @ 基準解析度
+SQUARE_SIZE_BASE = 640     # 1mm² 計數方格 @ 基準解析度
+SQUARE_SIZE_TOL_FRAC = 0.05  # 方格尺寸容忍誤差(佔目標尺寸的比例,5%)
 
 # 濃度公式(可調)
 DILUTION_FACTOR = 1.0      # 稀釋倍率(沒稀釋=1;1:1 trypan blue=2)
@@ -190,8 +191,15 @@ def process_one(jpg_path, out_dir, chamber_prefix=''):
     name = os.path.basename(jpg_path)
     img = io.imread(jpg_path)
 
+    # 依圖片解析度自動縮放參數(訓練在 1024×768,放到 4K 圖時參數要等比放大)
+    W = img.shape[1]
+    scale = W / BASE_IMAGE_WIDTH
+    cell_diameter = CELL_DIAMETER_BASE * scale
+    square_size = int(round(SQUARE_SIZE_BASE * scale))
+    square_size_tol = max(20, int(round(square_size * SQUARE_SIZE_TOL_FRAC)))
+
     # cellpose 偵測
-    masks, *_ = model.eval(img, diameter=CELL_DIAMETER)
+    masks, *_ = model.eval(img, diameter=cell_diameter)
     n_total = int(masks.max())
 
     # 自動偵測方格
@@ -200,7 +208,7 @@ def process_one(jpg_path, out_dir, chamber_prefix=''):
     h_lines = cluster_lines(h_peaks)
     v_lines = cluster_lines(v_peaks)
     bounds = find_square_by_size(h_lines, v_lines, img.shape,
-                                 target=SQUARE_SIZE_PX, tol=SQUARE_SIZE_TOL)
+                                 target=square_size, tol=square_size_tol)
     if bounds is None:
         return {'檔名': name, '全部數': n_total, 'L-shape計數': '',
                 '排除壓右下': '', '框外': '',
