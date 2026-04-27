@@ -60,6 +60,21 @@ For multi-step tasks, state a brief plan:
 
 Strong success criteria let you loop independently. Weak criteria ("make it work") require constant clarification.
 
+## 5. 對話紀錄(中文使用者偏好)
+
+當使用者說「存對話」、「記錄對話」、「更新紀錄」之類的時候:
+
+- **位置:** 專案根目錄下的 `對話紀錄/` 資料夾(沒有就建一個)
+- **檔名:** `對話紀錄_第N部分.md`(N=1, 2, 3...,依日期區段分檔)
+- **產生方式:** 用 `export_conversation.py`(若專案內沒有,從 [Algaeorithm-pilot_backend](D:\Algaeorithm-pilot_backend\export_conversation.py) 複製過去)
+- **資料來源:** `C:/Users/maxbb/.claude/projects/<專案目錄名>/<最新session-id>.jsonl`
+- **規則:** 不要用 move 蓋掉舊檔,用 cp 產生新檔;舊的留著讓使用者自己決定刪不刪
+
+範例指令:
+```bash
+python export_conversation.py "C:/Users/maxbb/.claude/projects/<projectname>/<session>.jsonl" "對話紀錄/對話紀錄_第N部分.md"
+```
+
 ---
 
 **These guidelines are working if:** fewer unnecessary changes in diffs, fewer rewrites due to overcomplication, and clarifying questions come before implementation rather than after mistakes.
