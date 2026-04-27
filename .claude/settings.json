@@ -1,0 +1,13 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(npx expo *)",
+      "Bash(eas build:configure --platform android)",
+      "Bash(npm uninstall *)",
+      "Bash(eas init *)",
+      "Bash(eas build:configure --platform android --non-interactive)",
+      "Bash(eas build:configure --help)",
+      "Bash(eas build *)"
+    ]
+  }
+}

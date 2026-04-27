@@ -13,17 +13,38 @@
       "backgroundColor": "#ffffff"
     },
     "ios": {
-      "supportsTablet": true
+      "supportsTablet": true,
+      "infoPlist": {
+        "NSCameraUsageDescription": "Algae App 需要相機權限拍攝燒杯照片"
+      }
     },
     "android": {
       "adaptiveIcon": {
         "foregroundImage": "./assets/adaptive-icon.png",
         "backgroundColor": "#ffffff"
       },
-      "edgeToEdgeEnabled": true
+      "edgeToEdgeEnabled": true,
+      "package": "com.algaeorithm.algae_app",
+      "permissions": [
+        "android.permission.CAMERA"
+      ]
     },
     "web": {
       "favicon": "./assets/favicon.png"
-    }
+    },
+    "plugins": [
+      [
+        "react-native-vision-camera",
+        {
+          "cameraPermissionText": "Algae App 需要相機權限拍攝燒杯照片"
+        }
+      ]
+    ],
+    "extra": {
+      "eas": {
+        "projectId": "02299b9c-bff3-40a1-9487-cf2ef3a1bb74"
+      }
+    },
+    "owner": "maxbbb661"
   }
 }
