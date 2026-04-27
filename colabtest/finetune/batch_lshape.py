@@ -111,7 +111,7 @@ def process_folder(folder, out_dir=None):
             '檔名': name,
             '全部數': n_total,
             'L-shape計數': n_in,
-            '排除壓左下': n_ex,
+            '排除壓右下': n_ex,
             '框外': n_out,
             '方框上': bounds[0],
             '方框下': bounds[1],

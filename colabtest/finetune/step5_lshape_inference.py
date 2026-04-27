@@ -108,7 +108,7 @@ def find_square_by_size(h_lines, v_lines, img_shape, target=640, tol=30):
 
 
 def apply_lshape(masks, bounds):
-    """身體碰邊規則:碰左/下 → 不算;否則(在框內或碰上/右)→ 算。"""
+    """身體碰邊規則:碰右/下 → 不算;否則(在框內或碰上/左)→ 算。"""
     top, bottom, left, right = bounds
     included, excluded, outside = [], [], []
     centroids = {}
@@ -121,9 +121,9 @@ def apply_lshape(masks, bounds):
         if not in_box.any():
             outside.append(mid)
             continue
-        touches_left = (xs == left).any() or ((xs < left) & (ys >= top) & (ys <= bottom)).any()
+        touches_right = (xs == right).any() or ((xs > right) & (ys >= top) & (ys <= bottom)).any()
         touches_bottom = (ys == bottom).any() or ((ys > bottom) & (xs >= left) & (xs <= right)).any()
-        if touches_left or touches_bottom:
+        if touches_right or touches_bottom:
             excluded.append(mid)
         else:
             included.append(mid)
@@ -144,10 +144,10 @@ def visualize(img, masks, bounds, included, excluded, outside, centroids, save_p
 
     # 右:L-shape 規則結果
     axes[1].imshow(img)
-    # 框:上(算)+ 右(算) = 綠;下(不算)+ 左(不算)= 紅虛線
+    # 框:上(算)+ 左(算) = 綠;下(不算)+ 右(不算)= 紅虛線
     axes[1].plot([left, right], [top, top], 'lime', linewidth=4)
-    axes[1].plot([right, right], [top, bottom], 'lime', linewidth=4)
-    axes[1].plot([left, left], [top, bottom], 'red', linewidth=3, linestyle='--')
+    axes[1].plot([left, left], [top, bottom], 'lime', linewidth=4)
+    axes[1].plot([right, right], [top, bottom], 'red', linewidth=3, linestyle='--')
     axes[1].plot([left, right], [bottom, bottom], 'red', linewidth=3, linestyle='--')
     for mid in included:
         cy, cx = centroids[mid]
@@ -198,7 +198,7 @@ for i, jpg in enumerate(jpgs, 1):
         print(f"  [WARN] 找不到計數方格 — 只記錄全部數")
         rows.append({
             '檔名': name, '全部數': n_total, 'L-shape計數': '',
-            '排除壓左下': '', '框外': '',
+            '排除壓右下': '', '框外': '',
             '方框上': '', '方框下': '', '方框左': '', '方框右': '',
         })
         continue
@@ -215,7 +215,7 @@ for i, jpg in enumerate(jpgs, 1):
         '檔名': name,
         '全部數': n_total,
         'L-shape計數': n_in,
-        '排除壓左下': n_ex,
+        '排除壓右下': n_ex,
         '框外': n_out,
         '方框上': bounds[0], '方框下': bounds[1],
         '方框左': bounds[2], '方框右': bounds[3],

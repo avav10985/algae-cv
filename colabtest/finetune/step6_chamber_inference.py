@@ -126,7 +126,7 @@ def find_square_by_size(h_lines, v_lines, img_shape, target=640, tol=30):
 
 
 def apply_lshape(masks, bounds):
-    """身體碰邊規則:碰左/下 → 不算;否則 → 算。"""
+    """身體碰邊規則:碰右/下 → 不算;否則 → 算。"""
     top, bottom, left, right = bounds
     included, excluded, outside = [], [], []
     centroids = {}
@@ -139,9 +139,9 @@ def apply_lshape(masks, bounds):
         if not in_box.any():
             outside.append(mid)
             continue
-        touches_left = (xs == left).any() or ((xs < left) & (ys >= top) & (ys <= bottom)).any()
+        touches_right = (xs == right).any() or ((xs > right) & (ys >= top) & (ys <= bottom)).any()
         touches_bottom = (ys == bottom).any() or ((ys > bottom) & (xs >= left) & (xs <= right)).any()
-        if touches_left or touches_bottom:
+        if touches_right or touches_bottom:
             excluded.append(mid)
         else:
             included.append(mid)
@@ -157,9 +157,10 @@ def visualize(img, masks, bounds, included, excluded, outside, centroids, save_p
     axes[0].axis('off')
 
     axes[1].imshow(img)
+    # 上(算)+ 左(算) = 綠;下(不算)+ 右(不算)= 紅虛線
     axes[1].plot([left, right], [top, top], 'lime', linewidth=4)
-    axes[1].plot([right, right], [top, bottom], 'lime', linewidth=4)
-    axes[1].plot([left, left], [top, bottom], 'red', linewidth=3, linestyle='--')
+    axes[1].plot([left, left], [top, bottom], 'lime', linewidth=4)
+    axes[1].plot([right, right], [top, bottom], 'red', linewidth=3, linestyle='--')
     axes[1].plot([left, right], [bottom, bottom], 'red', linewidth=3, linestyle='--')
     for mid in included:
         cy, cx = centroids[mid]
@@ -198,7 +199,7 @@ def process_one(jpg_path, out_dir, chamber_prefix=''):
                                  target=SQUARE_SIZE_PX, tol=SQUARE_SIZE_TOL)
     if bounds is None:
         return {'檔名': name, '全部數': n_total, 'L-shape計數': '',
-                '排除壓左下': '', '框外': '',
+                '排除壓右下': '', '框外': '',
                 '方框上': '', '方框下': '', '方框左': '', '方框右': '',
                 '濃度_cells_per_mL': '', 'note': '找不到計數方格'}
 
@@ -218,7 +219,7 @@ def process_one(jpg_path, out_dir, chamber_prefix=''):
         '檔名': name,
         '全部數': n_total,
         'L-shape計數': n_in,
-        '排除壓左下': len(exc),
+        '排除壓右下': len(exc),
         '框外': len(out),
         '方框上': bounds[0], '方框下': bounds[1],
         '方框左': bounds[2], '方框右': bounds[3],
@@ -271,19 +272,19 @@ final_concentration = overall_avg * DILUTION_FACTOR / VOLUME_PER_SQUARE_ML
 summary_rows = [
     {'位置': '上室平均', '檔名': f"({len(chamber_data['up'])} 張)", '全部數': '',
      'L-shape計數': round(up_avg, 2),
-     '排除壓左下': '', '框外': '',
+     '排除壓右下': '', '框外': '',
      '方框上': '', '方框下': '', '方框左': '', '方框右': '',
      '濃度_cells_per_mL': round(up_avg * DILUTION_FACTOR / VOLUME_PER_SQUARE_ML),
      'note': ''},
     {'位置': '下室平均', '檔名': f"({len(chamber_data['down'])} 張)", '全部數': '',
      'L-shape計數': round(down_avg, 2),
-     '排除壓左下': '', '框外': '',
+     '排除壓右下': '', '框外': '',
      '方框上': '', '方框下': '', '方框左': '', '方框右': '',
      '濃度_cells_per_mL': round(down_avg * DILUTION_FACTOR / VOLUME_PER_SQUARE_ML),
      'note': ''},
     {'位置': '總平均', '檔名': '', '全部數': '',
      'L-shape計數': round(overall_avg, 2),
-     '排除壓左下': '', '框外': '',
+     '排除壓右下': '', '框外': '',
      '方框上': '', '方框下': '', '方框左': '', '方框右': '',
      '濃度_cells_per_mL': round(final_concentration),
      'note': f'稀釋={DILUTION_FACTOR}, 體積={VOLUME_PER_SQUARE_ML}mL'},
@@ -295,7 +296,7 @@ summary_rows = [
 # ============================================================
 csv_path = os.path.join(results_dir, 'cell_counts.csv')
 fieldnames = ['位置', '檔名', '全部數', 'L-shape計數',
-              '排除壓左下', '框外',
+              '排除壓右下', '框外',
               '方框上', '方框下', '方框左', '方框右',
               '濃度_cells_per_mL', 'note']
 
@@ -307,7 +308,7 @@ with open(csv_path, 'w', newline='', encoding='utf-8-sig') as f:
         if r['位置'] == 'up':
             w.writerow({k: r.get(k, '') for k in fieldnames})
     w.writerow({'位置': '─' * 10, '檔名': '', '全部數': '', 'L-shape計數': '',
-                '排除壓左下': '', '框外': '', '方框上': '', '方框下': '',
+                '排除壓右下': '', '框外': '', '方框上': '', '方框下': '',
                 '方框左': '', '方框右': '', '濃度_cells_per_mL': '', 'note': ''})
     w.writerow(summary_rows[0])  # 上室平均
 
@@ -319,7 +320,7 @@ with open(csv_path, 'w', newline='', encoding='utf-8-sig') as f:
         if r['位置'] == 'down':
             w.writerow({k: r.get(k, '') for k in fieldnames})
     w.writerow({'位置': '─' * 10, '檔名': '', '全部數': '', 'L-shape計數': '',
-                '排除壓左下': '', '框外': '', '方框上': '', '方框下': '',
+                '排除壓右下': '', '框外': '', '方框上': '', '方框下': '',
                 '方框左': '', '方框右': '', '濃度_cells_per_mL': '', 'note': ''})
     w.writerow(summary_rows[1])  # 下室平均
 

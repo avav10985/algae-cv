@@ -2,10 +2,10 @@
 血球計數器 L-shape 計數規則
 
 規則:
-    上邊、右邊壓到的細胞 → 算入
-    下邊、左邊壓到的細胞 → 不算
+    上邊、左邊壓到的細胞 → 算入
+    下邊、右邊壓到的細胞 → 不算
 
-判斷:用細胞重心 (centroid) 是否落在 [top <= y < bottom, left < x <= right]
+判斷:用細胞身體是否碰到右/下邊判斷(碰到 → 排除)
 
 輸入: 原圖 + cellpose 的 _seg.npy
 輸出: L-shape 規則下的細胞數 + 視覺化圖
@@ -165,11 +165,11 @@ def apply_lshape(masks, bounds):
     """
     身體碰邊規則:
       - 身體跟方框有交集才考慮
-      - 碰到「左邊」的線(任何像素 x == left) → 不算
-      - 碰到「下邊」的線(任何像素 y == bottom) → 不算
-      - 否則(完全在框內 / 只碰到上邊或右邊)→ 算
+      - 碰到「右邊」的線(任何像素 x == right 或更右) → 不算
+      - 碰到「下邊」的線(任何像素 y == bottom 或更下) → 不算
+      - 否則(完全在框內 / 只碰到上邊或左邊)→ 算
 
-    L-shape 標準寫法:include 邊算進去,exclude 邊不算。
+    L-shape 標準寫法:壓上邊和左邊的算入,壓下邊和右邊的不算。
     """
     top, bottom, left, right = bounds
     included, excluded, outside = [], [], []
@@ -188,11 +188,11 @@ def apply_lshape(masks, bounds):
             outside.append(mask_id)
             continue
 
-        # 是否碰到 left 或 bottom 邊?
-        touches_left = (xs == left).any() or ((xs < left) & (ys >= top) & (ys <= bottom)).any()
+        # 是否碰到 right 或 bottom 邊?
+        touches_right = (xs == right).any() or ((xs > right) & (ys >= top) & (ys <= bottom)).any()
         touches_bottom = (ys == bottom).any() or ((ys > bottom) & (xs >= left) & (xs <= right)).any()
 
-        if touches_left or touches_bottom:
+        if touches_right or touches_bottom:
             excluded.append(mask_id)
         else:
             included.append(mask_id)
@@ -213,10 +213,10 @@ def visualize(img, masks, bounds, result, save_path=None, title_extra=""):
     fig, ax = plt.subplots(1, 1, figsize=(14, 10))
     ax.imshow(img)
 
-    # 計數方格框:上邊和右邊用粗線(算入),下邊和左邊用虛線(排除)
+    # 計數方格框:上邊和左邊用粗線(算入),下邊和右邊用虛線(排除)
     ax.plot([left, right], [top, top], color='lime', linewidth=4, label='上(算)')
-    ax.plot([right, right], [top, bottom], color='lime', linewidth=4, label='右(算)')
-    ax.plot([left, left], [top, bottom], color='red', linewidth=3, linestyle='--', label='左(不算)')
+    ax.plot([left, left], [top, bottom], color='lime', linewidth=4, label='左(算)')
+    ax.plot([right, right], [top, bottom], color='red', linewidth=3, linestyle='--', label='右(不算)')
     ax.plot([left, right], [bottom, bottom], color='red', linewidth=3, linestyle='--', label='下(不算)')
 
     # 細胞點
@@ -233,7 +233,7 @@ def visualize(img, masks, bounds, result, save_path=None, title_extra=""):
     ax.legend(loc='upper right', fontsize=10)
     n_in = len(result['included'])
     n_ex = len(result['excluded'])
-    ax.set_title(f"L-shape 計數: {n_in} 顆  (排除壓下/左邊: {n_ex} 顆) {title_extra}",
+    ax.set_title(f"L-shape 計數: {n_in} 顆  (排除壓下/右邊: {n_ex} 顆) {title_extra}",
                  fontsize=14)
     ax.axis('off')
 
@@ -283,7 +283,7 @@ def process_image(img_path, seg_path=None, save_dir=None, manual_bounds=None):
     result = apply_lshape(masks, bounds)
     print(f"\n總細胞數: {int(masks.max())}")
     print(f"L-shape 計入: {len(result['included'])} 顆")
-    print(f"L-shape 排除(壓下/左): {len(result['excluded'])} 顆")
+    print(f"L-shape 排除(壓下/右): {len(result['excluded'])} 顆")
     print(f"框外: {len(result['outside'])} 顆")
 
     if save_dir:
