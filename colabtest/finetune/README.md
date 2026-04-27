@@ -42,7 +42,8 @@ Step 3：Colab 上跑 fine-tune 腳本
 | `count_lshape.py` | L-shape 規則計數核心模組（單張）|
 | `batch_lshape.py` | 本機批次:對已有 jpg + _seg.npy 的資料夾跑 L-shape |
 | `step5_lshape_inference.py` | **Step 5 Colab 一條龍**:cellpose + L-shape 規則 + CSV |
-| `step6_chamber_inference.py` | **Step 6 上下室完整計算**:up/down 子資料夾 + 濃度公式 + 平均/總計 |
+| `step6_chamber_inference.py` | **Step 6 上下室完整計算**:up/down 子資料夾 + 濃度公式 + 平均/總計(高解析度圖會等比放大參數)|
+| `step7_chamber_inference_downsample.py` | **Step 7**:同 step6,但**先把高解析度圖縮小到 1024 寬**再分析(對 4K 圖更貼近訓練條件)|
 
 ## 標注規則對應
 
