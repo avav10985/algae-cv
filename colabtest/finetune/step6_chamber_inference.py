@@ -38,9 +38,13 @@ SQUARE_SIZE_TOL = 30       # 方格尺寸容忍誤差
 
 # 濃度公式(可調)
 DILUTION_FACTOR = 1.0      # 稀釋倍率(沒稀釋=1;1:1 trypan blue=2)
-VOLUME_PER_SQUARE_ML = 1e-4  # 1mm² × 0.1mm 深 = 10⁻⁴ mL
-# → 濃度 = L-shape計數 × DILUTION_FACTOR / VOLUME_PER_SQUARE_ML
-#   等價於:L-shape計數 × 10⁴ × DILUTION_FACTOR (cells/mL)
+IMAGES_PER_CHAMBER = 25    # 每室預期張數(用於體積計算)
+VOLUME_PER_CHAMBER_ML = 1e-3  # 每室容積 = 1 microliter = 10⁻³ mL
+VOLUME_PER_IMAGE_ML = VOLUME_PER_CHAMBER_ML / IMAGES_PER_CHAMBER  # 每張圖計數體積
+# → 上下室各 1 microliter,25 張覆蓋 1 microliter,所以每張 = 1/25 microliter = 4e-5 mL
+# → 每張濃度估計 = L-shape計數 × DILUTION_FACTOR / VOLUME_PER_IMAGE_ML (cells/mL)
+# → 室平均濃度 = avg × DILUTION_FACTOR / VOLUME_PER_IMAGE_ML
+# → 總濃度 = (上 sum + 下 sum) / (2 × VOLUME_PER_CHAMBER_ML)
 
 
 # ============================================================
@@ -206,8 +210,8 @@ def process_one(jpg_path, out_dir, chamber_prefix=''):
     inc, exc, out, cent = apply_lshape(masks, bounds)
     n_in = len(inc)
 
-    # 濃度公式
-    concentration = n_in * DILUTION_FACTOR / VOLUME_PER_SQUARE_ML
+    # 每張圖的濃度估計(若該 chamber 全是這個樣子,推算的 cells/mL)
+    concentration = n_in * DILUTION_FACTOR / VOLUME_PER_IMAGE_ML
 
     # 視覺化:檔名加上 chamber 前綴(例如 up_xxx_lshape.jpg)避免 up/down 同名衝突
     base = os.path.splitext(name)[0]
@@ -264,31 +268,69 @@ for chamber in ['up', 'down']:
 def avg(xs):
     return sum(xs) / len(xs) if xs else 0
 
+up_sum = sum(chamber_data['up'])
+down_sum = sum(chamber_data['down'])
 up_avg = avg(chamber_data['up'])
 down_avg = avg(chamber_data['down'])
-overall_avg = (up_avg + down_avg) / 2 if (chamber_data['up'] and chamber_data['down']) else (up_avg or down_avg)
-final_concentration = overall_avg * DILUTION_FACTOR / VOLUME_PER_SQUARE_ML
+n_up = len(chamber_data['up'])
+n_down = len(chamber_data['down'])
 
-summary_rows = [
-    {'位置': '上室平均', '檔名': f"({len(chamber_data['up'])} 張)", '全部數': '',
-     'L-shape計數': round(up_avg, 2),
-     '排除壓右下': '', '框外': '',
-     '方框上': '', '方框下': '', '方框左': '', '方框右': '',
-     '濃度_cells_per_mL': round(up_avg * DILUTION_FACTOR / VOLUME_PER_SQUARE_ML),
-     'note': ''},
-    {'位置': '下室平均', '檔名': f"({len(chamber_data['down'])} 張)", '全部數': '',
-     'L-shape計數': round(down_avg, 2),
-     '排除壓右下': '', '框外': '',
-     '方框上': '', '方框下': '', '方框左': '', '方框右': '',
-     '濃度_cells_per_mL': round(down_avg * DILUTION_FACTOR / VOLUME_PER_SQUARE_ML),
-     'note': ''},
-    {'位置': '總平均', '檔名': '', '全部數': '',
-     'L-shape計數': round(overall_avg, 2),
-     '排除壓右下': '', '框外': '',
-     '方框上': '', '方框下': '', '方框左': '', '方框右': '',
-     '濃度_cells_per_mL': round(final_concentration),
-     'note': f'稀釋={DILUTION_FACTOR}, 體積={VOLUME_PER_SQUARE_ML}mL'},
-]
+total_cells = up_sum + down_sum
+total_microliter = n_up + n_down  # 假設每張 = 1/25 microliter,(n_up + n_down) 張 ≈ (n_up+n_down)/25 microliter
+# 但你的 SOP 是 25 張/室 = 1 microliter/室,所以兩室 50 張 = 2 microliter
+chambers_microliter = (n_up / IMAGES_PER_CHAMBER) + (n_down / IMAGES_PER_CHAMBER)  # 實際覆蓋的 microliter 數
+per_microliter = total_cells / chambers_microliter if chambers_microliter else 0  # 1 microliter 內的細胞數
+final_concentration = per_microliter * 1000 * DILUTION_FACTOR    # × 1000 → cells/mL
+
+
+def empty_row():
+    return {k: '' for k in ['位置', '檔名', '全部數', 'L-shape計數',
+                            '排除壓右下', '框外', '方框上', '方框下',
+                            '方框左', '方框右', '濃度_cells_per_mL', 'note']}
+
+summary_rows = []
+
+# Step 1:上室加總
+r = empty_row(); r.update({
+    '位置': 'Step 1 上室加總', '檔名': f"({n_up} 張)",
+    'L-shape計數': up_sum,
+    'note': f'上室所有 L-shape 計數加起來 = {up_sum}'})
+summary_rows.append(r)
+
+# Step 2:下室加總
+r = empty_row(); r.update({
+    '位置': 'Step 2 下室加總', '檔名': f"({n_down} 張)",
+    'L-shape計數': down_sum,
+    'note': f'下室所有 L-shape 計數加起來 = {down_sum}'})
+summary_rows.append(r)
+
+# Step 3:兩室合計
+r = empty_row(); r.update({
+    '位置': 'Step 3 兩室合計', '檔名': f"(共 {n_up + n_down} 張)",
+    'L-shape計數': total_cells,
+    'note': f'{up_sum} + {down_sum} = {total_cells} 顆細胞 (在 {chambers_microliter:g} microliter 內)'})
+summary_rows.append(r)
+
+# Step 4:除以 microliter 數
+r = empty_row(); r.update({
+    '位置': f'Step 4 ÷ {chambers_microliter:g} 微升',
+    'L-shape計數': round(per_microliter, 2),
+    'note': f'{total_cells} ÷ {chambers_microliter:g} = {per_microliter:.2f} 顆 / 1 microliter'})
+summary_rows.append(r)
+
+# Step 5:回推 1 mL
+r = empty_row(); r.update({
+    '位置': 'Step 5 × 1000 (回推 1 mL)',
+    '濃度_cells_per_mL': round(final_concentration),
+    'note': f'{per_microliter:.2f} × 1000 × {DILUTION_FACTOR} (稀釋) = {round(final_concentration):,} cells/mL'})
+summary_rows.append(r)
+
+# 最終結果(置頂讓你一眼看到)
+r = empty_row(); r.update({
+    '位置': '⭐ 最終濃度',
+    '濃度_cells_per_mL': round(final_concentration),
+    'note': f'最終 = {round(final_concentration):,} cells/mL'})
+summary_rows.append(r)
 
 
 # ============================================================
@@ -303,38 +345,43 @@ fieldnames = ['位置', '檔名', '全部數', 'L-shape計數',
 with open(csv_path, 'w', newline='', encoding='utf-8-sig') as f:
     w = csv.DictWriter(f, fieldnames=fieldnames)
     w.writeheader()
+    sep = {k: '' for k in fieldnames}
+    bar = {k: '─' * 10 if k == '位置' else '' for k in fieldnames}
+
     # 上室明細
     for r in all_rows:
         if r['位置'] == 'up':
             w.writerow({k: r.get(k, '') for k in fieldnames})
-    w.writerow({'位置': '─' * 10, '檔名': '', '全部數': '', 'L-shape計數': '',
-                '排除壓右下': '', '框外': '', '方框上': '', '方框下': '',
-                '方框左': '', '方框右': '', '濃度_cells_per_mL': '', 'note': ''})
-    w.writerow(summary_rows[0])  # 上室平均
+    w.writerow(bar)
+    w.writerow(summary_rows[0])  # Step 1 上室加總
 
-    # 分隔
-    w.writerow({k: '' for k in fieldnames})
+    w.writerow(sep)
 
     # 下室明細
     for r in all_rows:
         if r['位置'] == 'down':
             w.writerow({k: r.get(k, '') for k in fieldnames})
-    w.writerow({'位置': '─' * 10, '檔名': '', '全部數': '', 'L-shape計數': '',
-                '排除壓右下': '', '框外': '', '方框上': '', '方框下': '',
-                '方框左': '', '方框右': '', '濃度_cells_per_mL': '', 'note': ''})
-    w.writerow(summary_rows[1])  # 下室平均
+    w.writerow(bar)
+    w.writerow(summary_rows[1])  # Step 2 下室加總
 
-    # 分隔 + 總計
-    w.writerow({k: '' for k in fieldnames})
-    w.writerow(summary_rows[2])
+    w.writerow(sep)
+    w.writerow(bar)
+
+    # 計算過程
+    w.writerow(summary_rows[2])  # Step 3 兩室合計
+    w.writerow(summary_rows[3])  # Step 4 ÷ 微升
+    w.writerow(summary_rows[4])  # Step 5 × 1000
+    w.writerow(sep)
+    w.writerow(summary_rows[5])  # ⭐ 最終濃度
 
 print(f"\n{'=' * 70}")
 print(f"[OK] CSV: {csv_path}")
 print(f"[OK] 視覺化: {results_dir}/(檔名以 up_ / down_ 前綴區分)")
-print(f"\n=== 統計摘要 ===")
-print(f"  上室({len(chamber_data['up'])} 張)平均 L-shape = {up_avg:.2f}")
-print(f"  下室({len(chamber_data['down'])} 張)平均 L-shape = {down_avg:.2f}")
-print(f"  總平均 L-shape = {overall_avg:.2f}")
-print(f"  最終濃度 = {final_concentration:,.0f} cells/mL")
-print(f"  (稀釋倍率 = {DILUTION_FACTOR}, 體積 = {VOLUME_PER_SQUARE_ML} mL)")
+print(f"\n=== 計算過程 ===")
+print(f"  Step 1  上室加總:  {up_sum} 顆細胞 ({n_up} 張)")
+print(f"  Step 2  下室加總:  {down_sum} 顆細胞 ({n_down} 張)")
+print(f"  Step 3  兩室合計:  {up_sum} + {down_sum} = {total_cells} 顆 (在 {chambers_microliter:g} 微升內)")
+print(f"  Step 4  ÷ {chambers_microliter:g} 微升: {per_microliter:.2f} 顆 / 1 微升")
+print(f"  Step 5  × 1000(回推 1 mL):  {per_microliter:.2f} × 1000 × {DILUTION_FACTOR} = {final_concentration:,.0f} cells/mL")
+print(f"\n  ⭐ 最終濃度 = {final_concentration:,.0f} cells/mL")
 print(f"{'=' * 70}")
