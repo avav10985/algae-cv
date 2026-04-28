@@ -15,7 +15,10 @@
       "WebFetch(domain:expo.dev)",
       "Read(//d/藻類比賽/資料/0102下-20260324T225901Z-3-001/0102下//**)",
       "Bash(venv/Scripts/python.exe -c ' *)",
-      "Bash(git add *)"
+      "Bash(git add *)",
+      "Bash(git commit -m ' *)",
+      "Bash(git push *)",
+      "Bash(git log *)"
     ]
   }
 }
