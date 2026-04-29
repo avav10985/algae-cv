@@ -25,10 +25,19 @@ const ALBUM_NAME = 'algae_app';
 const BEAKER_FRAC = { x: 0.04, y: 0.10, w: 0.55, h: 0.78 };
 const WHITECARD_FRAC = { x: 0.62, y: 0.10, w: 0.34, h: 0.78 };
 
-function timestampFilename() {
+// 拍照預設集 — 不同光照場景,選一個可保證該情境下兩次拍照數值穩定
+const PRESETS = [
+  { key: 'auto',   label: '自動',  tag: 'auto',   iso: undefined, exposure: undefined },
+  { key: 'iso50',  label: 'ISO50',  tag: 'iso50',  iso: 50,  exposure: 0 },
+  { key: 'iso100', label: 'ISO100', tag: 'iso100', iso: 100, exposure: 0 },
+  { key: 'iso200', label: 'ISO200', tag: 'iso200', iso: 200, exposure: 0 },
+  { key: 'iso400', label: 'ISO400', tag: 'iso400', iso: 400, exposure: 0 },
+];
+
+function timestampFilename(tag) {
   const d = new Date();
   const p = (n) => String(n).padStart(2, '0');
-  return `photo_${d.getFullYear()}-${p(d.getMonth() + 1)}-${p(d.getDate())}_${p(d.getHours())}-${p(d.getMinutes())}-${p(d.getSeconds())}.jpg`;
+  return `photo_${d.getFullYear()}-${p(d.getMonth() + 1)}-${p(d.getDate())}_${p(d.getHours())}-${p(d.getMinutes())}-${p(d.getSeconds())}_${tag}.jpg`;
 }
 
 async function getActualSize(uri) {
@@ -162,6 +171,8 @@ function CameraScreen({ onBack }) {
   const win = useWindowDimensions();
   const [busy, setBusy] = useState(false);
   const [last, setLast] = useState(null);
+  const [presetKey, setPresetKey] = useState('auto');
+  const preset = PRESETS.find((p) => p.key === presetKey) || PRESETS[0];
 
   useEffect(() => {
     if (!hasPermission) requestPermission();
@@ -176,7 +187,7 @@ function CameraScreen({ onBack }) {
         flash: 'off',
         enableShutterSound: false,
       });
-      const filename = timestampFilename();
+      const filename = timestampFilename(preset.tag);
       const dest = `${FileSystem.documentDirectory}${filename}`;
       const src = photo.path.startsWith('file://')
         ? photo.path
@@ -219,7 +230,7 @@ function CameraScreen({ onBack }) {
     } finally {
       setBusy(false);
     }
-  }, [busy]);
+  }, [busy, win, preset]);
 
   if (!hasPermission) {
     return (
@@ -256,7 +267,8 @@ function CameraScreen({ onBack }) {
         device={device}
         isActive={true}
         photo={true}
-        exposure={0}
+        iso={preset.iso}
+        exposure={preset.exposure}
       />
 
       <TouchableOpacity
@@ -275,6 +287,24 @@ function CameraScreen({ onBack }) {
       <View pointerEvents="none" style={[styles.overlay, fracToStyle(WHITECARD_FRAC)]}>
         <View style={[styles.roiBox, { borderColor: '#ffff00' }]} />
         <Text style={[styles.roiLabel, { backgroundColor: 'rgba(80,80,0,0.75)' }]}>白卡</Text>
+      </View>
+
+      <View style={styles.presetBar}>
+        {PRESETS.map((p) => {
+          const active = p.key === presetKey;
+          return (
+            <TouchableOpacity
+              key={p.key}
+              style={[styles.presetBtn, active && styles.presetBtnActive]}
+              onPress={() => setPresetKey(p.key)}
+              activeOpacity={0.7}
+            >
+              <Text style={[styles.presetLabel, active && styles.presetLabelActive]}>
+                {p.label}
+              </Text>
+            </TouchableOpacity>
+          );
+        })}
       </View>
 
       <View style={styles.controls}>
@@ -445,6 +475,33 @@ const styles = StyleSheet.create({
     paddingHorizontal: 6,
     paddingVertical: 1,
     borderRadius: 2,
+  },
+  presetBar: {
+    position: 'absolute',
+    bottom: 130,
+    left: 12,
+    right: 12,
+    flexDirection: 'row',
+    backgroundColor: 'rgba(0,0,0,0.55)',
+    borderRadius: 8,
+    padding: 4,
+  },
+  presetBtn: {
+    flex: 1,
+    paddingVertical: 8,
+    alignItems: 'center',
+    borderRadius: 4,
+  },
+  presetBtnActive: {
+    backgroundColor: '#00b07a',
+  },
+  presetLabel: {
+    color: 'rgba(255,255,255,0.7)',
+    fontSize: 11,
+    fontWeight: '600',
+  },
+  presetLabelActive: {
+    color: 'white',
   },
   controls: {
     position: 'absolute',
