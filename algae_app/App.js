@@ -21,23 +21,40 @@ import jpeg from 'jpeg-js';
 
 const ALBUM_NAME = 'algae_app';
 
-// 大框 — 燒杯佔左 55%×78%,白卡佔右 34%×78%
-const BEAKER_FRAC = { x: 0.04, y: 0.10, w: 0.55, h: 0.78 };
-const WHITECARD_FRAC = { x: 0.62, y: 0.10, w: 0.34, h: 0.78 };
+// 外框(視覺對齊用,用戶把物體放進外框就好)
+// 燒杯框較小 — 只取液體中心,避開玻璃壁 / 瓶口 / 液面
+// 白卡框較大 — 平面好填滿,取樣面積大訊號穩
+const BEAKER_FRAC = { x: 0.03, y: 0.30, w: 0.34, h: 0.40 };
+const WHITECARD_FRAC = { x: 0.41, y: 0.18, w: 0.56, h: 0.65 };
 
-// 拍照預設集 — 不同光照場景,選一個可保證該情境下兩次拍照數值穩定
-const PRESETS = [
-  { key: 'auto',   label: '自動',  tag: 'auto',   iso: undefined, exposure: undefined },
-  { key: 'iso50',  label: 'ISO50',  tag: 'iso50',  iso: 50,  exposure: 0 },
-  { key: 'iso100', label: 'ISO100', tag: 'iso100', iso: 100, exposure: 0 },
-  { key: 'iso200', label: 'ISO200', tag: 'iso200', iso: 200, exposure: 0 },
-  { key: 'iso400', label: 'ISO400', tag: 'iso400', iso: 400, exposure: 0 },
-];
+// 內框(實際取樣區,留 15% margin 給對齊誤差)
+const SAMPLE_PAD = 0.15;
+function innerRect(frac) {
+  return {
+    x: frac.x + frac.w * SAMPLE_PAD,
+    y: frac.y + frac.h * SAMPLE_PAD,
+    w: frac.w * (1 - 2 * SAMPLE_PAD),
+    h: frac.h * (1 - 2 * SAMPLE_PAD),
+  };
+}
+const BEAKER_INNER = innerRect(BEAKER_FRAC);
+const WHITECARD_INNER = innerRect(WHITECARD_FRAC);
 
-function timestampFilename(tag) {
+function timestampFilename() {
   const d = new Date();
   const p = (n) => String(n).padStart(2, '0');
-  return `photo_${d.getFullYear()}-${p(d.getMonth() + 1)}-${p(d.getDate())}_${p(d.getHours())}-${p(d.getMinutes())}-${p(d.getSeconds())}_${tag}.jpg`;
+  return `photo_${d.getFullYear()}-${p(d.getMonth() + 1)}-${p(d.getDate())}_${p(d.getHours())}-${p(d.getMinutes())}-${p(d.getSeconds())}.jpg`;
+}
+
+// 算「色比」= 燒杯RGB / 白卡RGB,這個比例對光照變化不敏感,可當濃度指標
+function colorRatio(beaker, white) {
+  if (!beaker || !white) return null;
+  const safe = (n) => Math.max(n, 1);
+  return {
+    r: beaker.r / safe(white.r),
+    g: beaker.g / safe(white.g),
+    b: beaker.b / safe(white.b),
+  };
 }
 
 async function getActualSize(uri) {
@@ -100,11 +117,13 @@ async function extractAvgRGB(uri, photoW, photoH, frac, label) {
       g += data[i + 1];
       b += data[i + 2];
     }
-    return {
+    const result = {
       r: Math.round(r / pix),
       g: Math.round(g / pix),
       b: Math.round(b / pix),
     };
+    console.log(`[${label}] RGB =`, result);
+    return result;
   } catch (e) {
     console.error(`[${label}] extract failed:`, e?.message ?? String(e));
     return null;
@@ -171,8 +190,6 @@ function CameraScreen({ onBack }) {
   const win = useWindowDimensions();
   const [busy, setBusy] = useState(false);
   const [last, setLast] = useState(null);
-  const [presetKey, setPresetKey] = useState('auto');
-  const preset = PRESETS.find((p) => p.key === presetKey) || PRESETS[0];
 
   useEffect(() => {
     if (!hasPermission) requestPermission();
@@ -187,7 +204,8 @@ function CameraScreen({ onBack }) {
         flash: 'off',
         enableShutterSound: false,
       });
-      const filename = timestampFilename(preset.tag);
+      const filename = timestampFilename();
+      console.log(`=== capture ===`);
       const dest = `${FileSystem.documentDirectory}${filename}`;
       const src = photo.path.startsWith('file://')
         ? photo.path
@@ -208,8 +226,8 @@ function CameraScreen({ onBack }) {
       const screenAspect = win.width / win.height;
       const photoAspect = actualW / actualH;
       console.log(`screen ${win.width}x${win.height} (aspect ${screenAspect.toFixed(3)}), photo ${actualW}x${actualH} (aspect ${photoAspect.toFixed(3)})`);
-      const beakerMapped = screenFracToPhotoFrac(BEAKER_FRAC, screenAspect, photoAspect);
-      const whiteMapped = screenFracToPhotoFrac(WHITECARD_FRAC, screenAspect, photoAspect);
+      const beakerMapped = screenFracToPhotoFrac(BEAKER_INNER, screenAspect, photoAspect);
+      const whiteMapped = screenFracToPhotoFrac(WHITECARD_INNER, screenAspect, photoAspect);
       console.log('mapped 燒杯 frac:', beakerMapped);
       console.log('mapped 白卡 frac:', whiteMapped);
       const beakerRGB = await extractAvgRGB(dest, actualW, actualH, beakerMapped, '燒杯');
@@ -230,7 +248,7 @@ function CameraScreen({ onBack }) {
     } finally {
       setBusy(false);
     }
-  }, [busy, win, preset]);
+  }, [busy, win]);
 
   if (!hasPermission) {
     return (
@@ -267,8 +285,6 @@ function CameraScreen({ onBack }) {
         device={device}
         isActive={true}
         photo={true}
-        iso={preset.iso}
-        exposure={preset.exposure}
       />
 
       <TouchableOpacity
@@ -281,30 +297,18 @@ function CameraScreen({ onBack }) {
 
       <View pointerEvents="none" style={[styles.overlay, fracToStyle(BEAKER_FRAC)]}>
         <View style={[styles.roiBox, { borderColor: '#00ff66' }]} />
-        <Text style={[styles.roiLabel, { backgroundColor: 'rgba(0,80,30,0.75)' }]}>燒杯</Text>
+        <Text style={[styles.roiLabel, { backgroundColor: 'rgba(0,80,30,0.75)' }]}>燒杯(對齊用)</Text>
+      </View>
+      <View pointerEvents="none" style={[styles.overlay, fracToStyle(BEAKER_INNER)]}>
+        <View style={[styles.roiInner, { borderColor: '#00ff66' }]} />
       </View>
 
       <View pointerEvents="none" style={[styles.overlay, fracToStyle(WHITECARD_FRAC)]}>
         <View style={[styles.roiBox, { borderColor: '#ffff00' }]} />
-        <Text style={[styles.roiLabel, { backgroundColor: 'rgba(80,80,0,0.75)' }]}>白卡</Text>
+        <Text style={[styles.roiLabel, { backgroundColor: 'rgba(80,80,0,0.75)' }]}>白卡(對齊用)</Text>
       </View>
-
-      <View style={styles.presetBar}>
-        {PRESETS.map((p) => {
-          const active = p.key === presetKey;
-          return (
-            <TouchableOpacity
-              key={p.key}
-              style={[styles.presetBtn, active && styles.presetBtnActive]}
-              onPress={() => setPresetKey(p.key)}
-              activeOpacity={0.7}
-            >
-              <Text style={[styles.presetLabel, active && styles.presetLabelActive]}>
-                {p.label}
-              </Text>
-            </TouchableOpacity>
-          );
-        })}
+      <View pointerEvents="none" style={[styles.overlay, fracToStyle(WHITECARD_INNER)]}>
+        <View style={[styles.roiInner, { borderColor: '#ffff00' }]} />
       </View>
 
       <View style={styles.controls}>
@@ -337,11 +341,20 @@ function CameraScreen({ onBack }) {
             ) : (
               <>
                 <Text style={[styles.infoLine, { color: '#ffff66' }]}>
-                  白卡 RGB: {last.white ? `(${last.white.r}, ${last.white.g}, ${last.white.b})` : '提取失敗'}
+                  白卡: {last.white ? `(${last.white.r}, ${last.white.g}, ${last.white.b})` : '失敗'}
                 </Text>
                 <Text style={[styles.infoLine, { color: '#66ff99' }]}>
-                  燒杯 RGB: {last.beaker ? `(${last.beaker.r}, ${last.beaker.g}, ${last.beaker.b})` : '提取失敗'}
+                  燒杯: {last.beaker ? `(${last.beaker.r}, ${last.beaker.g}, ${last.beaker.b})` : '失敗'}
                 </Text>
+                {(() => {
+                  const ratio = colorRatio(last.beaker, last.white);
+                  if (!ratio) return null;
+                  return (
+                    <Text style={[styles.infoLine, styles.ratioLine]}>
+                      🎯 色比 R:{ratio.r.toFixed(2)}  G:{ratio.g.toFixed(2)}  B:{ratio.b.toFixed(2)}
+                    </Text>
+                  );
+                })()}
               </>
             )}
           </View>
@@ -466,6 +479,13 @@ const styles = StyleSheet.create({
     borderWidth: 2,
     borderRadius: 4,
   },
+  roiInner: {
+    flex: 1,
+    borderWidth: 1,
+    borderStyle: 'dashed',
+    borderRadius: 2,
+    opacity: 0.85,
+  },
   roiLabel: {
     position: 'absolute',
     top: -22,
@@ -476,32 +496,13 @@ const styles = StyleSheet.create({
     paddingVertical: 1,
     borderRadius: 2,
   },
-  presetBar: {
-    position: 'absolute',
-    bottom: 130,
-    left: 12,
-    right: 12,
-    flexDirection: 'row',
-    backgroundColor: 'rgba(0,0,0,0.55)',
-    borderRadius: 8,
-    padding: 4,
-  },
-  presetBtn: {
-    flex: 1,
-    paddingVertical: 8,
-    alignItems: 'center',
-    borderRadius: 4,
-  },
-  presetBtnActive: {
-    backgroundColor: '#00b07a',
-  },
-  presetLabel: {
-    color: 'rgba(255,255,255,0.7)',
-    fontSize: 11,
-    fontWeight: '600',
-  },
-  presetLabelActive: {
-    color: 'white',
+  ratioLine: {
+    color: '#ffaa00',
+    fontWeight: '700',
+    marginTop: 4,
+    paddingTop: 4,
+    borderTopWidth: 1,
+    borderTopColor: 'rgba(255,255,255,0.2)',
   },
   controls: {
     position: 'absolute',
