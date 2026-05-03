@@ -1,0 +1,33 @@
+# Build outputs
+android/build
+android/.gradle
+android/app/build
+android/app/.cxx
+ios/build
+ios/Pods
+ios/DerivedData
+
+# Node
+node_modules
+
+# Expo cache
+.expo
+.expo-shared
+
+# Logs
+*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+
+# OS
+.DS_Store
+Thumbs.db
+
+# IDE
+.vscode
+.idea
+
+# Captured photos (test artifacts)
+photo_*.jpg
+*.tmp

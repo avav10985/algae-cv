@@ -3,6 +3,7 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import {
   Alert,
   Image,
+  Pressable,
   StyleSheet,
   Text,
   TouchableOpacity,
@@ -21,24 +22,13 @@ import jpeg from 'jpeg-js';
 
 const ALBUM_NAME = 'algae_app';
 
-// 外框(視覺對齊用,用戶把物體放進外框就好)
-// 燒杯框較小 — 只取液體中心,避開玻璃壁 / 瓶口 / 液面
-// 白卡框較大 — 平面好填滿,取樣面積大訊號穩
-const BEAKER_FRAC = { x: 0.03, y: 0.30, w: 0.34, h: 0.40 };
-const WHITECARD_FRAC = { x: 0.41, y: 0.18, w: 0.56, h: 0.65 };
-
-// 內框(實際取樣區,留 15% margin 給對齊誤差)
-const SAMPLE_PAD = 0.15;
-function innerRect(frac) {
-  return {
-    x: frac.x + frac.w * SAMPLE_PAD,
-    y: frac.y + frac.h * SAMPLE_PAD,
-    w: frac.w * (1 - 2 * SAMPLE_PAD),
-    h: frac.h * (1 - 2 * SAMPLE_PAD),
-  };
-}
-const BEAKER_INNER = innerRect(BEAKER_FRAC);
-const WHITECARD_INNER = innerRect(WHITECARD_FRAC);
+// ROI 框基礎參數(實際 h 在 runtime 依螢幕比例算,以求像素真正正方形)
+const BEAKER_W = 0.30;        // 燒杯框寬度(螢幕比例)
+const WHITECARD_W = 0.30;     // 白卡框寬度
+const WHITECARD_TALL = 1.5;   // 白卡高度倍率(1.0=正方形, 1.5=垂直長方形)
+const BOTTOM_Y = 0.83;        // 兩框底部對齊線
+const BEAKER_X = 0.12;
+const WHITECARD_X = 0.63;
 
 function timestampFilename() {
   const d = new Date();
@@ -190,6 +180,27 @@ function CameraScreen({ onBack }) {
   const win = useWindowDimensions();
   const [busy, setBusy] = useState(false);
   const [last, setLast] = useState(null);
+  const [focusPoint, setFocusPoint] = useState(null);
+
+  const handleFocus = useCallback(async (event) => {
+    if (!cameraRef.current) return;
+    const { locationX, locationY } = event.nativeEvent;
+    setFocusPoint({ x: locationX, y: locationY });
+    try {
+      await cameraRef.current.focus({ x: locationX, y: locationY });
+      console.log(`焦點鎖定 @ ${locationX.toFixed(0)}, ${locationY.toFixed(0)}`);
+    } catch (e) {
+      console.error('focus failed:', e?.message ?? String(e));
+    }
+    setTimeout(() => setFocusPoint(null), 1500);
+  }, []);
+
+  // 把 width 比例轉成 height 比例,使框在螢幕「像素上」是正方形
+  const squareH = (wFrac) => wFrac * (win.width / win.height);
+  const beakerH = squareH(BEAKER_W);
+  const whiteH = squareH(WHITECARD_W) * WHITECARD_TALL;
+  const BEAKER_FRAC = { x: BEAKER_X, y: BOTTOM_Y - beakerH, w: BEAKER_W, h: beakerH };
+  const WHITECARD_FRAC = { x: WHITECARD_X, y: BOTTOM_Y - whiteH, w: WHITECARD_W, h: whiteH };
 
   useEffect(() => {
     if (!hasPermission) requestPermission();
@@ -226,8 +237,8 @@ function CameraScreen({ onBack }) {
       const screenAspect = win.width / win.height;
       const photoAspect = actualW / actualH;
       console.log(`screen ${win.width}x${win.height} (aspect ${screenAspect.toFixed(3)}), photo ${actualW}x${actualH} (aspect ${photoAspect.toFixed(3)})`);
-      const beakerMapped = screenFracToPhotoFrac(BEAKER_INNER, screenAspect, photoAspect);
-      const whiteMapped = screenFracToPhotoFrac(WHITECARD_INNER, screenAspect, photoAspect);
+      const beakerMapped = screenFracToPhotoFrac(BEAKER_FRAC, screenAspect, photoAspect);
+      const whiteMapped = screenFracToPhotoFrac(WHITECARD_FRAC, screenAspect, photoAspect);
       console.log('mapped 燒杯 frac:', beakerMapped);
       console.log('mapped 白卡 frac:', whiteMapped);
       const beakerRGB = await extractAvgRGB(dest, actualW, actualH, beakerMapped, '燒杯');
@@ -287,6 +298,18 @@ function CameraScreen({ onBack }) {
         photo={true}
       />
 
+      <Pressable style={StyleSheet.absoluteFill} onPress={handleFocus} />
+
+      {focusPoint && (
+        <View
+          pointerEvents="none"
+          style={[
+            styles.focusIndicator,
+            { left: focusPoint.x - 30, top: focusPoint.y - 30 },
+          ]}
+        />
+      )}
+
       <TouchableOpacity
         style={styles.backBtn}
         onPress={onBack}
@@ -297,18 +320,12 @@ function CameraScreen({ onBack }) {
 
       <View pointerEvents="none" style={[styles.overlay, fracToStyle(BEAKER_FRAC)]}>
         <View style={[styles.roiBox, { borderColor: '#00ff66' }]} />
-        <Text style={[styles.roiLabel, { backgroundColor: 'rgba(0,80,30,0.75)' }]}>燒杯(對齊用)</Text>
-      </View>
-      <View pointerEvents="none" style={[styles.overlay, fracToStyle(BEAKER_INNER)]}>
-        <View style={[styles.roiInner, { borderColor: '#00ff66' }]} />
+        <Text style={[styles.roiLabel, { backgroundColor: 'rgba(0,80,30,0.75)' }]}>燒杯</Text>
       </View>
 
       <View pointerEvents="none" style={[styles.overlay, fracToStyle(WHITECARD_FRAC)]}>
         <View style={[styles.roiBox, { borderColor: '#ffff00' }]} />
-        <Text style={[styles.roiLabel, { backgroundColor: 'rgba(80,80,0,0.75)' }]}>白卡(對齊用)</Text>
-      </View>
-      <View pointerEvents="none" style={[styles.overlay, fracToStyle(WHITECARD_INNER)]}>
-        <View style={[styles.roiInner, { borderColor: '#ffff00' }]} />
+        <Text style={[styles.roiLabel, { backgroundColor: 'rgba(80,80,0,0.75)' }]}>白卡</Text>
       </View>
 
       <View style={styles.controls}>
@@ -466,6 +483,15 @@ const styles = StyleSheet.create({
     borderRadius: 6,
     zIndex: 10,
   },
+  focusIndicator: {
+    position: 'absolute',
+    width: 60,
+    height: 60,
+    borderRadius: 30,
+    borderWidth: 2,
+    borderColor: '#ffffff',
+    backgroundColor: 'rgba(255,255,255,0.08)',
+  },
   backBtnText: {
     color: 'white',
     fontSize: 14,
@@ -478,13 +504,6 @@ const styles = StyleSheet.create({
     flex: 1,
     borderWidth: 2,
     borderRadius: 4,
-  },
-  roiInner: {
-    flex: 1,
-    borderWidth: 1,
-    borderStyle: 'dashed',
-    borderRadius: 2,
-    opacity: 0.85,
   },
   roiLabel: {
     position: 'absolute',

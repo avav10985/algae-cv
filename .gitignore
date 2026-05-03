@@ -32,3 +32,6 @@ cellpose_portable/
 *.tif
 *.tiff
 *_seg.npy
+
+# 但是手機 app 的 icon / splash 必須進 git
+!algae_app/assets/*.png
