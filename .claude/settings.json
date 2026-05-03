@@ -21,7 +21,10 @@
       "Bash(git log *)",
       "Bash(python export_conversation.py \"C:/Users/maxbb/.claude/projects/d--Algaeorithm-pilot-backend/dbdf3a74-2b13-4018-bc21-7bb77d124b04.jsonl\" \"對話紀錄/對話紀錄_第2部分.md\")",
       "Bash(python export_conversation.py \"C:/Users/maxbb/.claude/projects/d--algae-cv/dc6f583b-db56-4ca4-a077-5cc03021c7c9.jsonl\" \"對話紀錄/對話紀錄_第3部分.md\")",
-      "PowerShell($candidates = @\\('C:\\\\Program Files\\\\Android\\\\Android Studio\\\\jbr', 'C:\\\\Program Files\\\\Android\\\\Android Studio\\\\jre', 'C:\\\\Program Files \\(x86\\)\\\\Android\\\\Android Studio\\\\jbr', 'C:\\\\Program Files \\(x86\\)\\\\Android\\\\Android Studio\\\\jre'\\); foreach \\($p in $candidates\\) { if \\(Test-Path \"$p\\\\bin\\\\javac.exe\"\\) { Write-Output \"FOUND: $p\" } })"
+      "PowerShell($candidates = @\\('C:\\\\Program Files\\\\Android\\\\Android Studio\\\\jbr', 'C:\\\\Program Files\\\\Android\\\\Android Studio\\\\jre', 'C:\\\\Program Files \\(x86\\)\\\\Android\\\\Android Studio\\\\jbr', 'C:\\\\Program Files \\(x86\\)\\\\Android\\\\Android Studio\\\\jre'\\); foreach \\($p in $candidates\\) { if \\(Test-Path \"$p\\\\bin\\\\javac.exe\"\\) { Write-Output \"FOUND: $p\" } })",
+      "PowerShell(Get-ChildItem -Path d:\\\\algae-cv\\\\algae_app -Force | Where-Object { $_.PSIsContainer } | ForEach-Object { $size = \\(Get-ChildItem $_.FullName -Recurse -Force -ErrorAction SilentlyContinue | Measure-Object -Property Length -Sum\\).Sum / 1MB; \"{0,8:N1} MB  {1}\" -f $size, $_.Name } | Sort-Object -Descending)",
+      "PowerShell(Get-ChildItem -Path d:\\\\algae-cv\\\\algae_app\\\\android -Force | ForEach-Object { $size = \\(Get-ChildItem $_.FullName -Recurse -Force -ErrorAction SilentlyContinue | Measure-Object -Property Length -Sum\\).Sum / 1MB; \"{0,8:N1} MB  {1}\" -f $size, $_.Name } | Sort-Object -Descending)",
+      "PowerShell(Get-ChildItem -Path d:\\\\algae-cv\\\\algae_app\\\\android\\\\app -Force | ForEach-Object { $size = \\(Get-ChildItem $_.FullName -Recurse -Force -ErrorAction SilentlyContinue | Measure-Object -Property Length -Sum\\).Sum / 1MB; \"{0,8:N1} MB  {1}\" -f $size, $_.Name } | Sort-Object -Descending)"
     ]
   }
 }
