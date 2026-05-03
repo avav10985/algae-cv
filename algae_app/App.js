@@ -30,10 +30,19 @@ const BOTTOM_Y = 0.83;        // 兩框底部對齊線
 const BEAKER_X = 0.12;
 const WHITECARD_X = 0.63;
 
-function timestampFilename() {
+function nowTimestamp() {
   const d = new Date();
   const p = (n) => String(n).padStart(2, '0');
-  return `photo_${d.getFullYear()}-${p(d.getMonth() + 1)}-${p(d.getDate())}_${p(d.getHours())}-${p(d.getMinutes())}-${p(d.getSeconds())}.jpg`;
+  return `${d.getFullYear()}-${p(d.getMonth() + 1)}-${p(d.getDate())}_${p(d.getHours())}-${p(d.getMinutes())}-${p(d.getSeconds())}`;
+}
+
+// 色比寫進檔名 (×100 整數),例如 R61G38B61
+function makeFilename(ts, beakerRGB, whiteRGB) {
+  const base = `photo_${ts}`;
+  if (!beakerRGB || !whiteRGB) return `${base}.jpg`;
+  const ratio = colorRatio(beakerRGB, whiteRGB);
+  const pad = (n) => String(Math.min(999, Math.max(0, Math.round(n * 100)))).padStart(3, '0');
+  return `${base}_R${pad(ratio.r)}G${pad(ratio.g)}B${pad(ratio.b)}.jpg`;
 }
 
 // 算「色比」= 燒杯RGB / 白卡RGB,這個比例對光照變化不敏感,可當濃度指標
@@ -215,41 +224,48 @@ function CameraScreen({ onBack }) {
         flash: 'off',
         enableShutterSound: false,
       });
-      const filename = timestampFilename();
+      const ts = nowTimestamp();
+      const tempName = `temp_${ts}.jpg`;
       console.log(`=== capture ===`);
-      const dest = `${FileSystem.documentDirectory}${filename}`;
+      const tempDest = `${FileSystem.documentDirectory}${tempName}`;
       const src = photo.path.startsWith('file://')
         ? photo.path
         : `file://${photo.path}`;
-      await FileSystem.copyAsync({ from: src, to: dest });
+      await FileSystem.copyAsync({ from: src, to: tempDest });
 
       setLast({
-        uri: dest,
-        name: filename,
+        uri: null,
+        name: '處理中...',
         beaker: null,
         white: null,
         albumOk: null,
         processing: true,
       });
 
-      const albumPromise = saveToAlbum(dest);
-      const { width: actualW, height: actualH } = await getActualSize(dest);
+      const { width: actualW, height: actualH } = await getActualSize(tempDest);
       const screenAspect = win.width / win.height;
       const photoAspect = actualW / actualH;
       console.log(`screen ${win.width}x${win.height} (aspect ${screenAspect.toFixed(3)}), photo ${actualW}x${actualH} (aspect ${photoAspect.toFixed(3)})`);
       const beakerMapped = screenFracToPhotoFrac(BEAKER_FRAC, screenAspect, photoAspect);
       const whiteMapped = screenFracToPhotoFrac(WHITECARD_FRAC, screenAspect, photoAspect);
-      console.log('mapped 燒杯 frac:', beakerMapped);
-      console.log('mapped 白卡 frac:', whiteMapped);
-      const beakerRGB = await extractAvgRGB(dest, actualW, actualH, beakerMapped, '燒杯');
-      const whiteRGB = await extractAvgRGB(dest, actualW, actualH, whiteMapped, '白卡');
-      const albumOk = await albumPromise;
+      const beakerRGB = await extractAvgRGB(tempDest, actualW, actualH, beakerMapped, '燒杯');
+      const whiteRGB = await extractAvgRGB(tempDest, actualW, actualH, whiteMapped, '白卡');
 
-      setLast((prev) =>
-        prev && prev.uri === dest
-          ? { ...prev, beaker: beakerRGB, white: whiteRGB, albumOk, processing: false }
-          : prev
-      );
+      // 把色比寫進最終檔名,然後改名 + 存相簿
+      const finalName = makeFilename(ts, beakerRGB, whiteRGB);
+      const finalDest = `${FileSystem.documentDirectory}${finalName}`;
+      await FileSystem.moveAsync({ from: tempDest, to: finalDest });
+      const albumOk = await saveToAlbum(finalDest);
+      console.log(`saved as ${finalName}`);
+
+      setLast({
+        uri: finalDest,
+        name: finalName,
+        beaker: beakerRGB,
+        white: whiteRGB,
+        albumOk,
+        processing: false,
+      });
 
       try {
         await FileSystem.deleteAsync(src, { idempotent: true });
