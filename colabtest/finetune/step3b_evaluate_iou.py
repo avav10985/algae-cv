@@ -9,15 +9,18 @@ Step 3b: 用現有 my_cpsam_A 模型跑 IoU + Accuracy 評估(不重新訓練)
 
 使用方式:
   Colab 開新筆記本,貼整份進一個 cell 跑完即可。
-  輸出最後 2 行就是海報「性能評估」區塊要填的數字。
+  輸出:
+    1. Console 印出明細表 + 平均統計
+    2. CSV 自動存到 Drive 的 CSV_OUT_PATH 路徑
 """
 # ============================================================
 #  ⚙️ 設定區
 # ============================================================
-TEST_DIR   = '/content/drive/MyDrive/cellpose_train_A/test'
-MODEL_PATH = '/content/drive/MyDrive/cellpose_train_A/models/my_cpsam_A'
-DIAMETER   = 45              # 跟 step3 訓練時一致
-IOU_THRESH = 0.5             # IoU ≥ 0.5 才算 True Positive(常見標準)
+TEST_DIR     = '/content/drive/MyDrive/cellpose_train_A/test'
+MODEL_PATH   = '/content/drive/MyDrive/cellpose_train_A/models/my_cpsam_A'
+CSV_OUT_PATH = '/content/drive/MyDrive/cellpose_train_A/eval_results.csv'
+DIAMETER     = 45            # 跟 step3 訓練時一致
+IOU_THRESH   = 0.5           # IoU ≥ 0.5 才算 True Positive(常見標準)
 
 
 # ============================================================
@@ -25,7 +28,7 @@ IOU_THRESH = 0.5             # IoU ≥ 0.5 才算 True Positive(常見標準)
 # ============================================================
 !pip install cellpose --quiet
 
-import os, glob
+import os, glob, csv
 import numpy as np
 import torch
 from cellpose import models, io
@@ -41,16 +44,17 @@ print(f"[OK] GPU: {torch.cuda.get_device_name(0)}")
 #  載入 test 資料
 # ============================================================
 def load_pairs(d):
-    images, masks = [], []
+    images, masks, names = [], [], []
     for jpg in sorted(glob.glob(os.path.join(d, '*.jpg'))):
         seg = jpg.replace('.jpg', '_seg.npy')
         if not os.path.exists(seg):
             continue
         images.append(io.imread(jpg))
         masks.append(np.load(seg, allow_pickle=True).item()['masks'])
-    return images, masks
+        names.append(os.path.basename(jpg))
+    return images, masks, names
 
-test_images, test_masks = load_pairs(TEST_DIR)
+test_images, test_masks, test_names = load_pairs(TEST_DIR)
 if not test_images:
     raise SystemExit(
         f"[ERROR] {TEST_DIR} 找不到 .jpg + _seg.npy 對\n"
@@ -129,39 +133,82 @@ def evaluate(pred, gt, thresh=IOU_THRESH):
 print(f"\n{'圖片':<14} {'cpsam (count/IoU/Acc)':>30} {'fine-tuned (count/IoU/Acc)':>32} {'GT':>5}")
 print("-" * 90)
 
-old_ious, new_ious = [], []
-old_accs, new_accs = [], []
-old_counts, new_counts, true_counts = [], [], []
+rows = []  # 每一筆明細,給 CSV 用
 
-for i, (img, gt) in enumerate(zip(test_images, test_masks)):
+for i, (img, gt, name) in enumerate(zip(test_images, test_masks, test_names)):
     true_count = len(np.unique(gt)) - 1
     old_pred, *_ = old_model.eval(img, diameter=DIAMETER)
     new_pred, *_ = new_model.eval(img, diameter=DIAMETER)
     old_count = len(np.unique(old_pred)) - 1
     new_count = len(np.unique(new_pred)) - 1
 
-    o_iou, o_acc, *_ = evaluate(old_pred, gt)
-    n_iou, n_acc, *_ = evaluate(new_pred, gt)
+    o_iou, o_acc, o_tp, o_fp, o_fn = evaluate(old_pred, gt)
+    n_iou, n_acc, n_tp, n_fp, n_fn = evaluate(new_pred, gt)
 
-    old_ious.append(o_iou); old_accs.append(o_acc); old_counts.append(old_count)
-    new_ious.append(n_iou); new_accs.append(n_acc); new_counts.append(new_count)
-    true_counts.append(true_count)
+    rows.append({
+        '檔名': name,
+        'GT': true_count,
+        'cpsam_count': old_count, 'cpsam_IoU': round(o_iou, 4), 'cpsam_Accuracy': round(o_acc, 4),
+        'cpsam_TP': o_tp, 'cpsam_FP': o_fp, 'cpsam_FN': o_fn,
+        'finetuned_count': new_count, 'finetuned_IoU': round(n_iou, 4), 'finetuned_Accuracy': round(n_acc, 4),
+        'finetuned_TP': n_tp, 'finetuned_FP': n_fp, 'finetuned_FN': n_fn,
+    })
 
     print(f"test_{i+1:<9}  {old_count:>5} / {o_iou:.3f} / {o_acc:.3f}      "
           f"{new_count:>5} / {n_iou:.3f} / {n_acc:.3f}      {true_count:>4}")
 
 print("-" * 90)
-old_mae = float(np.mean(np.abs(np.array(old_counts) - np.array(true_counts))))
-new_mae = float(np.mean(np.abs(np.array(new_counts) - np.array(true_counts))))
+
+# 平均統計
+def mean(key):
+    return float(np.mean([r[key] for r in rows]))
+
+cpsam_mae = float(np.mean([abs(r['cpsam_count'] - r['GT']) for r in rows]))
+ft_mae = float(np.mean([abs(r['finetuned_count'] - r['GT']) for r in rows]))
+cpsam_iou = mean('cpsam_IoU'); cpsam_acc = mean('cpsam_Accuracy')
+ft_iou = mean('finetuned_IoU'); ft_acc = mean('finetuned_Accuracy')
 
 print(f"\n{'=' * 70}")
 print("  📊 平均統計(填海報「性能評估」用)")
 print(f"{'=' * 70}")
-print(f"  原始 cpsam    →  mean IoU = {np.mean(old_ious):.3f}")
-print(f"                   Accuracy = {np.mean(old_accs):.3f}")
-print(f"                   Count MAE = {old_mae:.2f}")
+print(f"  原始 cpsam    →  mean IoU = {cpsam_iou:.3f}")
+print(f"                   Accuracy = {cpsam_acc:.3f}")
+print(f"                   Count MAE = {cpsam_mae:.2f}")
 print(f"")
-print(f"  Fine-tuned    →  mean IoU = {np.mean(new_ious):.3f}")
-print(f"                   Accuracy = {np.mean(new_accs):.3f}")
-print(f"                   Count MAE = {new_mae:.2f}")
+print(f"  Fine-tuned    →  mean IoU = {ft_iou:.3f}")
+print(f"                   Accuracy = {ft_acc:.3f}")
+print(f"                   Count MAE = {ft_mae:.2f}")
 print(f"{'=' * 70}")
+
+
+# ============================================================
+#  寫 CSV(明細 + 平均行)到 Drive
+# ============================================================
+fieldnames = list(rows[0].keys())
+with open(CSV_OUT_PATH, 'w', newline='', encoding='utf-8-sig') as f:
+    w = csv.DictWriter(f, fieldnames=fieldnames)
+    w.writeheader()
+    for r in rows:
+        w.writerow(r)
+    # 空行
+    w.writerow({k: '' for k in fieldnames})
+    # 平均行
+    w.writerow({
+        '檔名': '── 平均 ──',
+        'GT': '',
+        'cpsam_count': '', 'cpsam_IoU': round(cpsam_iou, 4), 'cpsam_Accuracy': round(cpsam_acc, 4),
+        'cpsam_TP': '', 'cpsam_FP': '', 'cpsam_FN': '',
+        'finetuned_count': '', 'finetuned_IoU': round(ft_iou, 4), 'finetuned_Accuracy': round(ft_acc, 4),
+        'finetuned_TP': '', 'finetuned_FP': '', 'finetuned_FN': '',
+    })
+    w.writerow({
+        '檔名': 'Count MAE',
+        'GT': '',
+        'cpsam_count': round(cpsam_mae, 2), 'cpsam_IoU': '', 'cpsam_Accuracy': '',
+        'cpsam_TP': '', 'cpsam_FP': '', 'cpsam_FN': '',
+        'finetuned_count': round(ft_mae, 2), 'finetuned_IoU': '', 'finetuned_Accuracy': '',
+        'finetuned_TP': '', 'finetuned_FP': '', 'finetuned_FN': '',
+    })
+
+print(f"\n[OK] CSV 存到: {CSV_OUT_PATH}")
+print("     用 Excel / Google Sheets 開都行(已加 BOM,中文不會亂碼)")

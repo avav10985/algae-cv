@@ -33,7 +33,12 @@
       "PowerShell(python \"d:\\\\algae-cv\\\\scale_poster.py\")",
       "Bash(cat)",
       "Bash(python /tmp/measure_check.py)",
-      "PowerShell(python \"d:\\\\algae-cv\\\\html_to_pdf.py\" \"d:\\\\algae-cv\\\\����_Ħ��Ħ��.html\")"
+      "PowerShell(python \"d:\\\\algae-cv\\\\html_to_pdf.py\" \"d:\\\\algae-cv\\\\����_Ħ��Ħ��.html\")",
+      "Bash(python)",
+      "Read(//c/Users/maxbb/AppData/Local/Temp/tmpk9u6i742/5/up/**)",
+      "Read(//c/Users/maxbb/AppData/Local/Temp/tmpk9u6i742/1/up/**)",
+      "Read(//c/Users/maxbb/AppData/Local/Temp/tmpk9u6i742/9/up/**)",
+      "Bash(python export_conversation.py \"C:/Users/maxbb/.claude/projects/d--algae-cv/3cec071a-6007-4862-9b73-108985ad94ef.jsonl\" \"對話紀錄/對話紀錄_第4部分.md\")"
     ]
   }
 }
