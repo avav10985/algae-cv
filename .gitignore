@@ -35,3 +35,11 @@ cellpose_portable/
 
 # 但是手機 app 的 icon / splash 必須進 git
 !algae_app/assets/*.png
+
+# 競賽海報、構想書、產 PDF 輔助腳本(不進 git history)
+海報_*.html
+海報_*.pdf
+GPM*.docx
+藻來藻去.docx
+html_to_pdf.py
+scale_poster.py

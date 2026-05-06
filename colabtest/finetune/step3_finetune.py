@@ -17,8 +17,10 @@ Step 3：Fine-tune cpsam 模型 — 在 Colab 上跑
 """
 
 # ============================================================
-#  載入套件 + 掛載 Drive
+#  安裝 + 載入套件 + 掛載 Drive
 # ============================================================
+!pip install cellpose --quiet
+
 import os
 import glob
 import time
@@ -41,11 +43,11 @@ else:
 # ============================================================
 #  設定區
 # ============================================================
-TRAIN_DIR = '/content/drive/MyDrive/cellpose_train/train'
-TEST_DIR = '/content/drive/MyDrive/cellpose_train/test'
+TRAIN_DIR = '/content/drive/MyDrive/cellpose_train_A/train'
+TEST_DIR = '/content/drive/MyDrive/cellpose_train_A/test'
 
 # 輸出的模型存哪（訓練後可以帶走）
-MODEL_SAVE_PATH = '/content/drive/MyDrive/cellpose_train/my_cpsam_model'
+MODEL_SAVE_PATH = '/content/drive/MyDrive/cellpose_train_A/my_cpsam_A'
 
 # 訓練參數
 N_EPOCHS = 100          # 訓練輪數，100 夠了；太多會 overfit
@@ -87,6 +89,15 @@ train_images, train_masks = load_training_data(TRAIN_DIR)
 print("\n==== 載入測試資料 ====")
 test_images, test_masks = load_training_data(TEST_DIR)
 
+# 0 張的話直接喊出來,免得 cellpose 內部噴 IndexError 看不懂
+if len(train_images) == 0:
+    raise SystemExit(
+        f"[ERROR] {TRAIN_DIR} 找不到任何 .jpg + _seg.npy 對\n"
+        f"  → 確認 Drive 已掛載且路徑正確;若資料夾名稱不同,改最上面的 TRAIN_DIR / TEST_DIR")
+if len(test_images) == 0:
+    raise SystemExit(
+        f"[ERROR] {TEST_DIR} 找不到任何 .jpg + _seg.npy 對\n"
+        f"  → 確認路徑正確;test 至少要有 1 對才能驗證")
 if len(train_images) < 10:
     print(f"[WARN] 只有 {len(train_images)} 張訓練圖，建議至少 15-20 張！")
 
@@ -151,6 +162,8 @@ for i, (img, true_mask) in enumerate(zip(test_images, test_masks)):
     new_count, _ = count_cells(new_model, img)
 
     print(f"test_{i+1:<25} {old_count:>12} {new_count:>12} {true_count:>8}")
+
+# 想要 IoU + Accuracy 評估?跑 step3b_evaluate_iou.py(不用重新訓練)
 
 
 # ============================================================

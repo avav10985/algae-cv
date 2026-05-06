@@ -43,9 +43,10 @@ IMAGES_PER_CHAMBER = 25    # 每室預期張數(用於體積計算)
 VOLUME_PER_CHAMBER_ML = 1e-3  # 每室容積 = 1 microliter = 10⁻³ mL
 VOLUME_PER_IMAGE_ML = VOLUME_PER_CHAMBER_ML / IMAGES_PER_CHAMBER  # 每張圖計數體積
 # → 上下室各 1 microliter,25 張覆蓋 1 microliter,所以每張 = 1/25 microliter = 4e-5 mL
-# → 每張濃度估計 = L-shape計數 × DILUTION_FACTOR / VOLUME_PER_IMAGE_ML (cells/mL)
-# → 室平均濃度 = avg × DILUTION_FACTOR / VOLUME_PER_IMAGE_ML
-# → 總濃度 = (上 sum + 下 sum) / (2 × VOLUME_PER_CHAMBER_ML)
+# → 單張外推 cells/mL = L-shape計數 × DILUTION_FACTOR / VOLUME_PER_IMAGE_ML
+#    (假設整室都長這張的樣子推算的濃度,僅供單張比較;不是最終答案)
+# → 最終濃度 = (上 sum + 下 sum) / chambers_microliter × 1000 × DILUTION_FACTOR
+#    (實際所有 L-shape 計數加總後再回推,這個才是最終答案)
 
 
 # ============================================================
@@ -213,7 +214,8 @@ def process_one(jpg_path, out_dir, chamber_prefix=''):
         return {'檔名': name, '全部數': n_total, 'L-shape計數': '',
                 '排除壓右下': '', '框外': '',
                 '方框上': '', '方框下': '', '方框左': '', '方框右': '',
-                '濃度_cells_per_mL': '', 'note': '找不到計數方格'}
+                '單張外推_cells_per_mL': '', '最終濃度_cells_per_mL': '',
+                'note': '找不到計數方格'}
 
     inc, exc, out, cent = apply_lshape(masks, bounds)
     n_in = len(inc)
@@ -235,7 +237,8 @@ def process_one(jpg_path, out_dir, chamber_prefix=''):
         '框外': len(out),
         '方框上': bounds[0], '方框下': bounds[1],
         '方框左': bounds[2], '方框右': bounds[3],
-        '濃度_cells_per_mL': round(concentration),
+        '單張外推_cells_per_mL': round(concentration),
+        '最終濃度_cells_per_mL': '',
         'note': '',
     }
 
@@ -267,7 +270,7 @@ for chamber in ['up', 'down']:
         all_rows.append(row)
         if isinstance(row['L-shape計數'], int):
             chamber_data[chamber].append(row['L-shape計數'])
-        print(f"→ 全部={row['全部數']}, L-shape={row['L-shape計數']}, 濃度={row['濃度_cells_per_mL']}")
+        print(f"→ 全部={row['全部數']}, L-shape={row['L-shape計數']}, 單張外推={row['單張外推_cells_per_mL']}")
 
 
 # ============================================================
@@ -284,8 +287,6 @@ n_up = len(chamber_data['up'])
 n_down = len(chamber_data['down'])
 
 total_cells = up_sum + down_sum
-total_microliter = n_up + n_down  # 假設每張 = 1/25 microliter,(n_up + n_down) 張 ≈ (n_up+n_down)/25 microliter
-# 但你的 SOP 是 25 張/室 = 1 microliter/室,所以兩室 50 張 = 2 microliter
 chambers_microliter = (n_up / IMAGES_PER_CHAMBER) + (n_down / IMAGES_PER_CHAMBER)  # 實際覆蓋的 microliter 數
 per_microliter = total_cells / chambers_microliter if chambers_microliter else 0  # 1 microliter 內的細胞數
 final_concentration = per_microliter * 1000 * DILUTION_FACTOR    # × 1000 → cells/mL
@@ -294,7 +295,8 @@ final_concentration = per_microliter * 1000 * DILUTION_FACTOR    # × 1000 → c
 def empty_row():
     return {k: '' for k in ['位置', '檔名', '全部數', 'L-shape計數',
                             '排除壓右下', '框外', '方框上', '方框下',
-                            '方框左', '方框右', '濃度_cells_per_mL', 'note']}
+                            '方框左', '方框右',
+                            '單張外推_cells_per_mL', '最終濃度_cells_per_mL', 'note']}
 
 summary_rows = []
 
@@ -329,14 +331,14 @@ summary_rows.append(r)
 # Step 5:回推 1 mL
 r = empty_row(); r.update({
     '位置': 'Step 5 × 1000 (回推 1 mL)',
-    '濃度_cells_per_mL': round(final_concentration),
+    '最終濃度_cells_per_mL': round(final_concentration),
     'note': f'{per_microliter:.2f} × 1000 × {DILUTION_FACTOR} (稀釋) = {round(final_concentration):,} cells/mL'})
 summary_rows.append(r)
 
 # 最終結果(置頂讓你一眼看到)
 r = empty_row(); r.update({
     '位置': '⭐ 最終濃度',
-    '濃度_cells_per_mL': round(final_concentration),
+    '最終濃度_cells_per_mL': round(final_concentration),
     'note': f'最終 = {round(final_concentration):,} cells/mL'})
 summary_rows.append(r)
 
@@ -348,7 +350,7 @@ csv_path = os.path.join(results_dir, 'cell_counts.csv')
 fieldnames = ['位置', '檔名', '全部數', 'L-shape計數',
               '排除壓右下', '框外',
               '方框上', '方框下', '方框左', '方框右',
-              '濃度_cells_per_mL', 'note']
+              '單張外推_cells_per_mL', '最終濃度_cells_per_mL', 'note']
 
 with open(csv_path, 'w', newline='', encoding='utf-8-sig') as f:
     w = csv.DictWriter(f, fieldnames=fieldnames)

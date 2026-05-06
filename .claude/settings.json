@@ -24,7 +24,16 @@
       "PowerShell($candidates = @\\('C:\\\\Program Files\\\\Android\\\\Android Studio\\\\jbr', 'C:\\\\Program Files\\\\Android\\\\Android Studio\\\\jre', 'C:\\\\Program Files \\(x86\\)\\\\Android\\\\Android Studio\\\\jbr', 'C:\\\\Program Files \\(x86\\)\\\\Android\\\\Android Studio\\\\jre'\\); foreach \\($p in $candidates\\) { if \\(Test-Path \"$p\\\\bin\\\\javac.exe\"\\) { Write-Output \"FOUND: $p\" } })",
       "PowerShell(Get-ChildItem -Path d:\\\\algae-cv\\\\algae_app -Force | Where-Object { $_.PSIsContainer } | ForEach-Object { $size = \\(Get-ChildItem $_.FullName -Recurse -Force -ErrorAction SilentlyContinue | Measure-Object -Property Length -Sum\\).Sum / 1MB; \"{0,8:N1} MB  {1}\" -f $size, $_.Name } | Sort-Object -Descending)",
       "PowerShell(Get-ChildItem -Path d:\\\\algae-cv\\\\algae_app\\\\android -Force | ForEach-Object { $size = \\(Get-ChildItem $_.FullName -Recurse -Force -ErrorAction SilentlyContinue | Measure-Object -Property Length -Sum\\).Sum / 1MB; \"{0,8:N1} MB  {1}\" -f $size, $_.Name } | Sort-Object -Descending)",
-      "PowerShell(Get-ChildItem -Path d:\\\\algae-cv\\\\algae_app\\\\android\\\\app -Force | ForEach-Object { $size = \\(Get-ChildItem $_.FullName -Recurse -Force -ErrorAction SilentlyContinue | Measure-Object -Property Length -Sum\\).Sum / 1MB; \"{0,8:N1} MB  {1}\" -f $size, $_.Name } | Sort-Object -Descending)"
+      "PowerShell(Get-ChildItem -Path d:\\\\algae-cv\\\\algae_app\\\\android\\\\app -Force | ForEach-Object { $size = \\(Get-ChildItem $_.FullName -Recurse -Force -ErrorAction SilentlyContinue | Measure-Object -Property Length -Sum\\).Sum / 1MB; \"{0,8:N1} MB  {1}\" -f $size, $_.Name } | Sort-Object -Descending)",
+      "Bash(python -c ' *)",
+      "Bash(python -c \"import ast; [ast.parse\\(open\\(f, encoding='utf-8'\\).read\\(\\).replace\\('!pip install cellpose --quiet', ''\\)\\) for f in ['colabtest/finetune/step6_chamber_inference.py', 'colabtest/finetune/step7_chamber_inference_downsample.py']]; print\\('OK'\\)\")",
+      "Bash(python -c \"import ast; ast.parse\\(open\\('colabtest/finetune/step3_finetune.py', encoding='utf-8'\\).read\\(\\)\\); print\\('OK'\\)\")",
+      "PowerShell(python \"d:\\\\algae-cv\\\\html_to_pdf.py\")",
+      "PowerShell(python \"d:\\\\algae-cv\\\\html_to_pdf.py\" 2>&1)",
+      "PowerShell(python \"d:\\\\algae-cv\\\\scale_poster.py\")",
+      "Bash(cat)",
+      "Bash(python /tmp/measure_check.py)",
+      "PowerShell(python \"d:\\\\algae-cv\\\\html_to_pdf.py\" \"d:\\\\algae-cv\\\\����_Ħ��Ħ��.html\")"
     ]
   }
 }

@@ -217,7 +217,8 @@ def process_one(jpg_path, out_dir, chamber_prefix=''):
         return {'檔名': name, '全部數': n_total, 'L-shape計數': '',
                 '排除壓右下': '', '框外': '',
                 '方框上': '', '方框下': '', '方框左': '', '方框右': '',
-                '濃度_cells_per_mL': '', 'note': f'找不到計數方格(原圖 {W_full}×{H_full},縮為 {W}×{H})'}
+                '單張外推_cells_per_mL': '', '最終濃度_cells_per_mL': '',
+                'note': f'找不到計數方格(原圖 {W_full}×{H_full},縮為 {W}×{H})'}
 
     inc, exc, out, cent = apply_lshape(masks, bounds)
     n_in = len(inc)
@@ -237,7 +238,8 @@ def process_one(jpg_path, out_dir, chamber_prefix=''):
         '框外': len(out),
         '方框上': bounds[0], '方框下': bounds[1],
         '方框左': bounds[2], '方框右': bounds[3],
-        '濃度_cells_per_mL': round(concentration),
+        '單張外推_cells_per_mL': round(concentration),
+        '最終濃度_cells_per_mL': '',
         'note': f'原圖 {W_full}×{H_full} → 縮為 {W}×{H} 處理' if downsample_scale != 1.0 else '',
     }
 
@@ -268,7 +270,7 @@ for chamber in ['up', 'down']:
         all_rows.append(row)
         if isinstance(row['L-shape計數'], int):
             chamber_data[chamber].append(row['L-shape計數'])
-        print(f"→ 全部={row['全部數']}, L-shape={row['L-shape計數']}, 濃度={row['濃度_cells_per_mL']}")
+        print(f"→ 全部={row['全部數']}, L-shape={row['L-shape計數']}, 單張外推={row['單張外推_cells_per_mL']}")
 
 
 # ============================================================
@@ -293,7 +295,8 @@ final_concentration = per_microliter * 1000 * DILUTION_FACTOR
 def empty_row():
     return {k: '' for k in ['位置', '檔名', '全部數', 'L-shape計數',
                             '排除壓右下', '框外', '方框上', '方框下',
-                            '方框左', '方框右', '濃度_cells_per_mL', 'note']}
+                            '方框左', '方框右',
+                            '單張外推_cells_per_mL', '最終濃度_cells_per_mL', 'note']}
 
 summary_rows = []
 
@@ -323,13 +326,13 @@ summary_rows.append(r)
 
 r = empty_row(); r.update({
     '位置': 'Step 5 × 1000 (回推 1 mL)',
-    '濃度_cells_per_mL': round(final_concentration),
+    '最終濃度_cells_per_mL': round(final_concentration),
     'note': f'{per_microliter:.2f} × 1000 × {DILUTION_FACTOR} (稀釋) = {round(final_concentration):,} cells/mL'})
 summary_rows.append(r)
 
 r = empty_row(); r.update({
     '位置': '⭐ 最終濃度',
-    '濃度_cells_per_mL': round(final_concentration),
+    '最終濃度_cells_per_mL': round(final_concentration),
     'note': f'最終 = {round(final_concentration):,} cells/mL'})
 summary_rows.append(r)
 
@@ -341,7 +344,7 @@ csv_path = os.path.join(results_dir, 'cell_counts.csv')
 fieldnames = ['位置', '檔名', '全部數', 'L-shape計數',
               '排除壓右下', '框外',
               '方框上', '方框下', '方框左', '方框右',
-              '濃度_cells_per_mL', 'note']
+              '單張外推_cells_per_mL', '最終濃度_cells_per_mL', 'note']
 
 with open(csv_path, 'w', newline='', encoding='utf-8-sig') as f:
     w = csv.DictWriter(f, fieldnames=fieldnames)
