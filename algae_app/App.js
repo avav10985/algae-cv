@@ -36,13 +36,18 @@ function nowTimestamp() {
   return `${d.getFullYear()}-${p(d.getMonth() + 1)}-${p(d.getDate())}_${p(d.getHours())}-${p(d.getMinutes())}-${p(d.getSeconds())}`;
 }
 
-// 色比寫進檔名 (×100 整數),例如 R61G38B61
+// 色比 + 估計濃度寫進檔名,例如 photo_..._R045G062B038_C0480123.jpg
+//   R/G/B = 色比 ×100(3 位),C = cells/mL(7 位零墊好,讓檔名按字典序剛好等於濃度排序)
 function makeFilename(ts, beakerRGB, whiteRGB) {
   const base = `photo_${ts}`;
   if (!beakerRGB || !whiteRGB) return `${base}.jpg`;
   const ratio = colorRatio(beakerRGB, whiteRGB);
-  const pad = (n) => String(Math.min(999, Math.max(0, Math.round(n * 100)))).padStart(3, '0');
-  return `${base}_R${pad(ratio.r)}G${pad(ratio.g)}B${pad(ratio.b)}.jpg`;
+  const pad3 = (n) => String(Math.min(999, Math.max(0, Math.round(n * 100)))).padStart(3, '0');
+  const cells = predictCellsPerML(ratio);
+  const cellsTag = cells != null
+    ? `_C${String(Math.min(9999999, Math.max(0, cells))).padStart(7, '0')}`
+    : '';
+  return `${base}_R${pad3(ratio.r)}G${pad3(ratio.g)}B${pad3(ratio.b)}${cellsTag}.jpg`;
 }
 
 // 算「色比」= 燒杯RGB / 白卡RGB,這個比例對光照變化不敏感,可當濃度指標
@@ -54,6 +59,27 @@ function colorRatio(beaker, white) {
     g: beaker.g / safe(white.g),
     b: beaker.b / safe(white.b),
   };
+}
+
+// 從色比估算 cells/mL — Beer-Lambert 三變數線性迴歸
+// 校準資料:6 個稀釋(1:9 ~ 10:0)× 3 張 = 18 筆,R² = 0.9971
+// 訓練日期 2026-05-04,小球藻;若換樣本 / 換手機要重新跑 step9_calibration.py
+function predictCellsPerML(ratio) {
+  if (!ratio) return null;
+  // 邊界保護:色比應該在 (0, 1] 之間,負值 / 0 會讓 log 爆炸
+  const clip = (n) => Math.max(0.01, Math.min(1.0, n));
+  const aR = -Math.log10(clip(ratio.r));
+  const aG = -Math.log10(clip(ratio.g));
+  const aB = -Math.log10(clip(ratio.b));
+  const cells = 971036 * aR + (-1909525) * aG + 980922 * aB + (-22968);
+  return Math.max(0, Math.round(cells));
+}
+
+function formatCells(n) {
+  if (n == null) return '—';
+  // 1,234,567 千分位逗號;太大用科學記號
+  if (n >= 10_000_000) return n.toExponential(2).replace('e+', '×10^');
+  return n.toLocaleString('en-US');
 }
 
 async function getActualSize(uri) {
@@ -382,10 +408,16 @@ function CameraScreen({ onBack }) {
                 {(() => {
                   const ratio = colorRatio(last.beaker, last.white);
                   if (!ratio) return null;
+                  const cells = predictCellsPerML(ratio);
                   return (
-                    <Text style={[styles.infoLine, styles.ratioLine]}>
-                      🎯 色比 R:{ratio.r.toFixed(2)}  G:{ratio.g.toFixed(2)}  B:{ratio.b.toFixed(2)}
-                    </Text>
+                    <>
+                      <Text style={[styles.infoLine, styles.ratioLine]}>
+                        🎯 色比 R:{ratio.r.toFixed(2)}  G:{ratio.g.toFixed(2)}  B:{ratio.b.toFixed(2)}
+                      </Text>
+                      <Text style={[styles.infoLine, styles.cellsLine]}>
+                        🦠 估計濃度 {formatCells(cells)} cells/mL
+                      </Text>
+                    </>
                   );
                 })()}
               </>
@@ -538,6 +570,12 @@ const styles = StyleSheet.create({
     paddingTop: 4,
     borderTopWidth: 1,
     borderTopColor: 'rgba(255,255,255,0.2)',
+  },
+  cellsLine: {
+    color: '#00ddaa',
+    fontWeight: '800',
+    fontSize: 13,
+    marginTop: 2,
   },
   controls: {
     position: 'absolute',
