@@ -31,3 +31,13 @@ Thumbs.db
 # Captured photos (test artifacts)
 photo_*.jpg
 *.tmp
+
+# 校準資料、實驗素材(不該打包進 APK,只是分析用)
+app拍照/
+drive-download-*/
+results_sensitive-*/
+GPM*.docx
+藻來藻去.docx
+海報_*.html
+海報_*.pdf
+*.zip
