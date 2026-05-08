@@ -45,7 +45,11 @@
       "Bash(python -c \"import ast; ast.parse\\(open\\('colabtest/finetune/step9_calibration.py', encoding='utf-8'\\).read\\(\\)\\); print\\('syntax OK'\\)\")",
       "Bash(python \"d:\\\\algae-cv\\\\colabtest\\\\finetune\\\\step9_calibration.py\")",
       "Bash(python -X utf8)",
-      "Bash(node -e ' *)"
+      "Bash(node -e ' *)",
+      "Bash(python \"colabtest/finetune/step9_calibration.py\")",
+      "Bash(python -c \"import ast; ast.parse\\(open\\('colabtest/finetune/step9_calibration.py', encoding='utf-8'\\).read\\(\\)\\); print\\('OK'\\)\")",
+      "Bash(python \"colabtest/finetune/step9b_compare_versions.py\")",
+      "Bash(git -c core.quotepath=false status --short)"
     ]
   }
 }

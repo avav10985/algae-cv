@@ -36,18 +36,26 @@ function nowTimestamp() {
   return `${d.getFullYear()}-${p(d.getMonth() + 1)}-${p(d.getDate())}_${p(d.getHours())}-${p(d.getMinutes())}-${p(d.getSeconds())}`;
 }
 
-// 色比 + 估計濃度寫進檔名,例如 photo_..._R045G062B038_C0480123.jpg
-//   R/G/B = 色比 ×100(3 位),C = cells/mL(7 位零墊好,讓檔名按字典序剛好等於濃度排序)
+// 色比 + 估計濃度 + OD 寫進檔名
+// 例如 photo_..._R045G062B038_CR0480123_CM0492011_O0857.jpg
+//   R/G/B  色比 ×100(3 位)
+//   CR     R-only 模型估計 cells/mL(7 位零墊)
+//   CM     Multi (RGB) 模型估計 cells/mL(7 位零墊)
+//   O      OD630 ×1000(4 位零墊,例 0287 = 0.287)
 function makeFilename(ts, beakerRGB, whiteRGB) {
   const base = `photo_${ts}`;
   if (!beakerRGB || !whiteRGB) return `${base}.jpg`;
   const ratio = colorRatio(beakerRGB, whiteRGB);
   const pad3 = (n) => String(Math.min(999, Math.max(0, Math.round(n * 100)))).padStart(3, '0');
-  const cells = predictCellsPerML(ratio);
-  const cellsTag = cells != null
-    ? `_C${String(Math.min(9999999, Math.max(0, cells))).padStart(7, '0')}`
-    : '';
-  return `${base}_R${pad3(ratio.r)}G${pad3(ratio.g)}B${pad3(ratio.b)}${cellsTag}.jpg`;
+  const pad7 = (n) => String(Math.min(9999999, Math.max(0, n))).padStart(7, '0');
+  const pad4 = (n) => String(Math.min(9999, Math.max(0, Math.round(n * 1000)))).padStart(4, '0');
+  const cR = predictCellsPerML_R(ratio);
+  const cM = predictCellsPerML_RGB(ratio);
+  const od = predictOD630(ratio);
+  const tagR = cR != null ? `_CR${pad7(cR)}` : '';
+  const tagM = cM != null ? `_CM${pad7(cM)}` : '';
+  const tagO = od != null ? `_O${pad4(od)}` : '';
+  return `${base}_R${pad3(ratio.r)}G${pad3(ratio.g)}B${pad3(ratio.b)}${tagR}${tagM}${tagO}.jpg`;
 }
 
 // 算「色比」= 燒杯RGB / 白卡RGB,這個比例對光照變化不敏感,可當濃度指標
@@ -61,18 +69,71 @@ function colorRatio(beaker, white) {
   };
 }
 
-// 從色比估算 cells/mL — Beer-Lambert 三變數線性迴歸
-// 校準資料:6 個稀釋(1:9 ~ 10:0)× 3 張 = 18 筆,R² = 0.9971
-// 訓練日期 2026-05-04,小球藻;若換樣本 / 換手機要重新跑 step9_calibration.py
-function predictCellsPerML(ratio) {
+// 從色比估算 cells/mL — 兩種線性迴歸並行,讓檔名同時記錄兩個估計值
+// 校準資料:6 個稀釋(全 step8 sensitive)× 每比例 3 張取平均 = N=6
+// 訓練日期 2026-05-04,小球藻;換樣本 / 換手機 → 重跑 step9_calibration.py 換係數
+
+// 模型 A:只用紅光(Beer-Lambert 紅光單變數,海報好講)
+// R² = 0.9862  RMSE = 31,366 cells/mL
+function predictCellsPerML_R(ratio) {
   if (!ratio) return null;
-  // 邊界保護:色比應該在 (0, 1] 之間,負值 / 0 會讓 log 爆炸
-  const clip = (n) => Math.max(0.01, Math.min(1.0, n));
-  const aR = -Math.log10(clip(ratio.r));
-  const aG = -Math.log10(clip(ratio.g));
-  const aB = -Math.log10(clip(ratio.b));
-  const cells = 971036 * aR + (-1909525) * aG + 980922 * aB + (-22968);
+  const r = Math.max(0.01, Math.min(1.0, ratio.r));
+  const cells = (-1441330) * r + 1157536;
   return Math.max(0, Math.round(cells));
+}
+
+// 模型 B:三變數直接線性(R+G+B,精度略高)
+// R² = 0.9919  RMSE = 24,xxx cells/mL
+function predictCellsPerML_RGB(ratio) {
+  if (!ratio) return null;
+  const clip = (n) => Math.max(0.01, Math.min(1.0, n));
+  const cells = 1871075 * clip(ratio.r)
+              + (-1658209) * clip(ratio.g)
+              + (-2197011) * clip(ratio.b)
+              + 1557485;
+  return Math.max(0, Math.round(cells));
+}
+
+// === OD 預測(色比 → 分光光度計吸光值)===
+// 校準資料:0504 + 0506 兩天合併,每比例 3 張取平均(R² 詳見下方)
+// G 通道為主要預測子(藻反射綠光,動態範圍最線性)
+function _odLinear(ratio, aR, aG, aB, d) {
+  if (!ratio) return null;
+  const c = (n) => Math.max(0.01, Math.min(1.0, n));
+  return Math.max(0, aR * c(ratio.r) + aG * c(ratio.g) + aB * c(ratio.b) + d);
+}
+// OD630(N=20,R²=0.977)
+function predictOD630(ratio) { return _odLinear(ratio,  1.9327, -2.4670, -2.0551,  2.2357); }
+// OD647(N=20,R²=0.976)— 葉綠素 b 吸收
+function predictOD647(ratio) { return _odLinear(ratio,  2.0620, -2.5132, -2.1233,  2.2189); }
+// OD664(N=10,R²=0.993)— 葉綠素 a 吸收峰
+function predictOD664(ratio) { return _odLinear(ratio,  0.7424, -2.4442, -0.9197,  2.4060); }
+// OD750(N=10,R²=0.991)— 近紅外,反映混濁度
+function predictOD750(ratio) { return _odLinear(ratio,  0.7361, -2.4088, -0.7677,  2.2804); }
+
+// 葉綠素 a / b 濃度(Lichtenthaler 1987,80% 丙酮萃取係數,單位 μg/mL)
+//   Chl-a = 12.25·OD664 − 2.85·OD647
+//   Chl-b = 20.31·OD647 − 4.91·OD664
+//   Total = Chl-a + Chl-b
+// 注意:這組係數假設「丙酮萃取後讀 OD」;直接拍燒杯不萃取也可估個大概,
+// 但絕對值會偏離真實植物萃取液數字,主要看「相對變化」就夠用。
+function predictChlorophyllA(ratio) {
+  const od664 = predictOD664(ratio);
+  const od647 = predictOD647(ratio);
+  if (od664 == null || od647 == null) return null;
+  return Math.max(0, 12.25 * od664 - 2.85 * od647);
+}
+function predictChlorophyllB(ratio) {
+  const od664 = predictOD664(ratio);
+  const od647 = predictOD647(ratio);
+  if (od664 == null || od647 == null) return null;
+  return Math.max(0, 20.31 * od647 - 4.91 * od664);
+}
+function predictChlorophyllTotal(ratio) {
+  const a = predictChlorophyllA(ratio);
+  const b = predictChlorophyllB(ratio);
+  if (a == null || b == null) return null;
+  return a + b;
 }
 
 function formatCells(n) {
@@ -408,14 +469,25 @@ function CameraScreen({ onBack }) {
                 {(() => {
                   const ratio = colorRatio(last.beaker, last.white);
                   if (!ratio) return null;
-                  const cells = predictCellsPerML(ratio);
+                  const cR = predictCellsPerML_R(ratio);
+                  const cM = predictCellsPerML_RGB(ratio);
+                  const od630 = predictOD630(ratio);
+                  const od664 = predictOD664(ratio);
+                  const chla = predictChlorophyllA(ratio);
+                  const chlb = predictChlorophyllB(ratio);
                   return (
                     <>
                       <Text style={[styles.infoLine, styles.ratioLine]}>
                         🎯 色比 R:{ratio.r.toFixed(2)}  G:{ratio.g.toFixed(2)}  B:{ratio.b.toFixed(2)}
                       </Text>
                       <Text style={[styles.infoLine, styles.cellsLine]}>
-                        🦠 估計濃度 {formatCells(cells)} cells/mL
+                        🦠 cells/mL  R:{formatCells(cR)}  RGB:{formatCells(cM)}
+                      </Text>
+                      <Text style={[styles.infoLine, styles.odLine]}>
+                        🌈 OD630 {od630.toFixed(2)}  OD664 {od664.toFixed(2)}
+                      </Text>
+                      <Text style={[styles.infoLine, styles.chlaLine]}>
+                        🍃 Chl-a {chla.toFixed(1)}  Chl-b {chlb.toFixed(1)} μg/mL
                       </Text>
                     </>
                   );
@@ -576,6 +648,18 @@ const styles = StyleSheet.create({
     fontWeight: '800',
     fontSize: 13,
     marginTop: 2,
+  },
+  odLine: {
+    color: '#7ec0ff',
+    fontWeight: '700',
+    fontSize: 12,
+    marginTop: 3,
+  },
+  chlaLine: {
+    color: '#a8ff66',
+    fontWeight: '800',
+    fontSize: 12,
+    marginTop: 1,
   },
   controls: {
     position: 'absolute',

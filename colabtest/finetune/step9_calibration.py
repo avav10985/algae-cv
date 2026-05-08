@@ -90,28 +90,43 @@ for r in RATIOS_TO_USE:
 
 
 # ============================================================
-#  3. 配成樣本(N = 比例數 × 3)
+#  3. 配成樣本 — 每比例 3 張 RGB 取平均(N = 比例數)
+#     避免 pseudo-replication:同一濃度的 3 張不是獨立樣本,
+#     當 3 個獨立點塞進迴歸會虛抬 R²。正規做法是取平均。
 # ============================================================
-X_lin = []   # 直接 R, G, B
-X_log = []   # Beer-Lambert: -log10(R), -log10(G), -log10(B)
-y     = []
+X_lin   = []   # 直接 R, G, B(平均後,給 RGB 多變數迴歸用)
+X_log   = []   # -log10(R, G, B)(BL 多變數)
+X_R     = []   # 只用 R(R-only 單變數)
+y       = []
 ratios_per_row = []
+detail_rows = []  # 每比例 3 張的細節(寫 CSV 用)
 
 for r in RATIOS_TO_USE:
     if r in EXCLUDE_RATIOS or r not in cells_data or r not in phone_data:
         continue
-    cells = cells_data[r]
-    for (R, G, B) in phone_data[r]:
-        X_lin.append([R, G, B])
-        X_log.append([-np.log10(R), -np.log10(G), -np.log10(B)])
-        y.append(cells)
-        ratios_per_row.append(r)
+    rows = phone_data[r]
+    # 細節:每張存 R/G/B + 真實濃度
+    for i, (R0, G0, B0) in enumerate(rows, 1):
+        detail_rows.append({
+            '類型': 'photo', '比例': r, '張號': i,
+            'R': R0, 'G': G0, 'B': B0, '真實cells/mL': cells_data[r],
+        })
+    # 平均:當 N=6 訓練集
+    R = sum(x[0] for x in rows) / len(rows)
+    G = sum(x[1] for x in rows) / len(rows)
+    B = sum(x[2] for x in rows) / len(rows)
+    X_lin.append([R, G, B])
+    X_log.append([-np.log10(R), -np.log10(G), -np.log10(B)])
+    X_R.append([R])
+    y.append(cells_data[r])
+    ratios_per_row.append(r)
 
 X_lin = np.array(X_lin)
 X_log = np.array(X_log)
+X_R   = np.array(X_R)
 y     = np.array(y, dtype=float)
 
-print(f'\n=== 訓練集:N = {len(y)} 筆 ===')
+print(f'\n=== 訓練集:N = {len(y)} 筆(每比例 3 張取平均)===')
 
 
 # ============================================================
@@ -127,14 +142,19 @@ def fit(X, y, name):
     rmse = float(np.sqrt(np.mean((y - y_pred)**2)))
     return coef, r2, rmse, y_pred
 
-c_lin, r2_lin, rmse_lin, yp_lin = fit(X_lin, y, '直接線性')
+c_R,   r2_R,   rmse_R,   yp_R   = fit(X_R,   y, 'R-only')
+c_lin, r2_lin, rmse_lin, yp_lin = fit(X_lin, y, 'RGB 直接線性')
 c_log, r2_log, rmse_log, yp_log = fit(X_log, y, 'Beer-Lambert')
 
-print(f'\n=== 模型 1:cells/mL = a·R + b·G + c·B + d(直接線性)===')
+print(f'\n=== 模型 A:cells/mL = a·R + b(R-only,海報好寫)===')
+print(f'  係數: a={c_R[0]:>14,.0f}  b={c_R[1]:>14,.0f}')
+print(f'  R² = {r2_R:.4f}    RMSE = {rmse_R:,.0f} cells/mL')
+
+print(f'\n=== 模型 B:cells/mL = a·R + b·G + c·B + d(RGB 直接線性)===')
 print(f'  係數: a={c_lin[0]:>14,.0f}  b={c_lin[1]:>14,.0f}  c={c_lin[2]:>14,.0f}  d={c_lin[3]:>14,.0f}')
 print(f'  R² = {r2_lin:.4f}    RMSE = {rmse_lin:,.0f} cells/mL')
 
-print(f'\n=== 模型 2:cells/mL = a·(-logR) + b·(-logG) + c·(-logB) + d(Beer-Lambert)===')
+print(f'\n=== 模型 C:cells/mL = a·(-logR) + b·(-logG) + c·(-logB) + d(Beer-Lambert)===')
 print(f'  係數: a={c_log[0]:>14,.0f}  b={c_log[1]:>14,.0f}  c={c_log[2]:>14,.0f}  d={c_log[3]:>14,.0f}')
 print(f'  R² = {r2_log:.4f}    RMSE = {rmse_log:,.0f} cells/mL')
 
@@ -155,19 +175,68 @@ for r in RATIOS_TO_USE:
 
 
 # ============================================================
-#  6. 寫 calibration_data.csv
+#  6. 寫 calibration_data.csv(明細 18 筆 + 平均 6 筆 + 模型係數)
 # ============================================================
+def predict_with(coef, X):
+    """X 帶截距套係數出預測值"""
+    Xb = np.hstack([X, np.ones((len(X), 1))])
+    return Xb @ coef
+
+# 把每張(detail)用模型 A/B/C 算預測
+header = ['類型', '比例', '張號', 'R', 'G', 'B',
+         '真實cells/mL',
+         'A_R-only預測', 'A 殘差',
+         'B_RGB預測', 'B 殘差',
+         'C_BL預測', 'C 殘差']
+
 with open(OUT_CSV, 'w', newline='', encoding='utf-8-sig') as f:
     w = csv.writer(f)
-    w.writerow(['比例', '真實cells/mL', 'R', 'G', 'B',
-                '線性預測', 'BL預測', '線性殘差', 'BL殘差'])
-    for i in range(len(y)):
-        r = ratios_per_row[i]
-        actual = int(y[i])
-        R, G, B = X_lin[i]
-        p1, p2 = yp_lin[i], yp_log[i]
-        w.writerow([r, actual, round(R,3), round(G,3), round(B,3),
-                    round(p1), round(p2), round(actual-p1), round(actual-p2)])
+    w.writerow(header)
+
+    # === 第 1 區:每張 photo 細節(18 筆)===
+    for r in RATIOS_TO_USE:
+        if r in EXCLUDE_RATIOS or r not in cells_data or r not in phone_data:
+            continue
+        rows = phone_data[r]
+        actual = cells_data[r]
+        for i, (R0, G0, B0) in enumerate(rows, 1):
+            pA = c_R[0] * R0 + c_R[1]
+            pB = c_lin[0]*R0 + c_lin[1]*G0 + c_lin[2]*B0 + c_lin[3]
+            pC = c_log[0]*(-np.log10(R0)) + c_log[1]*(-np.log10(G0)) + c_log[2]*(-np.log10(B0)) + c_log[3]
+            w.writerow(['photo', r, i,
+                       round(R0,3), round(G0,3), round(B0,3),
+                       actual,
+                       round(pA), round(actual-pA),
+                       round(pB), round(actual-pB),
+                       round(pC), round(actual-pC)])
+
+        # === 該比例的平均行(緊接著該濃度 3 張之後)===
+        R, G, B = X_lin[ratios_per_row.index(r)]
+        idx = ratios_per_row.index(r)
+        pA = c_R[0]*R + c_R[1]
+        pB = yp_lin[idx]
+        pC = yp_log[idx]
+        w.writerow(['─avg─', r, '(3張平均)',
+                   round(R,3), round(G,3), round(B,3),
+                   actual,
+                   round(pA), round(actual-pA),
+                   round(pB), round(actual-pB),
+                   round(pC), round(actual-pC)])
+        w.writerow([''] * len(header))   # 空行分隔
+
+    # === 第 2 區:模型係數 + R² ===
+    w.writerow(['─' * 8] * len(header))
+    w.writerow(['模型', '公式', '', '', '', '', '', 'R²', 'RMSE'])
+    w.writerow(['A R-only',
+               f'cells/mL = {c_R[0]:,.0f} * R + {c_R[1]:,.0f}',
+               '', '', '', '', '', round(r2_R, 4), round(rmse_R)])
+    w.writerow(['B RGB 直接',
+               f'cells/mL = {c_lin[0]:,.0f}*R + {c_lin[1]:,.0f}*G + {c_lin[2]:,.0f}*B + {c_lin[3]:,.0f}',
+               '', '', '', '', '', round(r2_lin, 4), round(rmse_lin)])
+    w.writerow(['C BL',
+               f'cells/mL = {c_log[0]:,.0f}*(-logR) + {c_log[1]:,.0f}*(-logG) + {c_log[2]:,.0f}*(-logB) + {c_log[3]:,.0f}',
+               '', '', '', '', '', round(r2_log, 4), round(rmse_log)])
+
 print(f'\n[OK] CSV: {OUT_CSV}')
 
 
