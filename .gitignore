@@ -41,8 +41,16 @@ cellpose_portable/
 海報_*.pdf
 GPM*.docx
 藻來藻去.docx
+第*頁.docx
 html_to_pdf.py
 scale_poster.py
 export_conversation.py
 algae_app/drive-download-20260506T195732Z-3-001.zip
 algae_app/drive-download-20260506T195732Z-3-001/
+
+# CO2 / 大量原始量測資料(不進 git history)
+co2_data*.csv
+extracted_diagram.png
+preview_diagram.png
+a1ytk-*.svg
+edge_diagram.svg

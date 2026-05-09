@@ -2,8 +2,11 @@ import { StatusBar } from 'expo-status-bar';
 import { useCallback, useEffect, useRef, useState } from 'react';
 import {
   Alert,
+  FlatList,
   Image,
+  Modal,
   Pressable,
+  ScrollView,
   StyleSheet,
   Text,
   TouchableOpacity,
@@ -136,6 +139,28 @@ function predictChlorophyllTotal(ratio) {
   return a + b;
 }
 
+// 從檔名解出所有資料(不用碰 EXIF / DB,單純 regex 解析)
+// 對應 makeFilename:photo_<ts>_R<3>G<3>B<3>_CR<7>_CM<7>_O<4>.jpg
+function parseFilename(filename) {
+  const m = filename.match(
+    /^photo_(\d{4}-\d{2}-\d{2}_\d{2}-\d{2}-\d{2})_R(\d{3})G(\d{3})B(\d{3})(?:_CR(\d{7}))?(?:_CM(\d{7}))?(?:_O(\d{4}))?\.jpg$/
+  );
+  if (!m) return null;
+  const ratio = { r: parseInt(m[2]) / 100, g: parseInt(m[3]) / 100, b: parseInt(m[4]) / 100 };
+  return {
+    filename,
+    ts: m[1].replace('_', ' ').replace(/-/g, (x, i) => (i === 10 || i === 13 ? ':' : '-')),
+    ratio,
+    cellsR: m[5] ? parseInt(m[5]) : null,
+    cellsRGB: m[6] ? parseInt(m[6]) : null,
+    od630: m[7] ? parseInt(m[7]) / 1000 : null,
+    // 衍生指標(現算,因為舊檔可能沒包這些)
+    od664: predictOD664(ratio),
+    chla: predictChlorophyllA(ratio),
+    chlb: predictChlorophyllB(ratio),
+  };
+}
+
 function formatCells(n) {
   if (n == null) return '—';
   // 1,234,567 千分位逗號;太大用科學記號
@@ -233,14 +258,17 @@ async function saveToAlbum(uri) {
 
 export default function App() {
   const [screen, setScreen] = useState('home');
-  return screen === 'home' ? (
-    <HomeScreen onStartCamera={() => setScreen('camera')} />
-  ) : (
-    <CameraScreen onBack={() => setScreen('home')} />
+  if (screen === 'camera') return <CameraScreen onBack={() => setScreen('home')} />;
+  if (screen === 'history') return <HistoryScreen onBack={() => setScreen('home')} />;
+  return (
+    <HomeScreen
+      onStartCamera={() => setScreen('camera')}
+      onOpenHistory={() => setScreen('history')}
+    />
   );
 }
 
-function HomeScreen({ onStartCamera }) {
+function HomeScreen({ onStartCamera, onOpenHistory }) {
   return (
     <View style={styles.homeRoot}>
       <View style={styles.homeTop}>
@@ -248,14 +276,25 @@ function HomeScreen({ onStartCamera }) {
         <Text style={styles.homeSubtitle}>藻類比色 · 顏色 → 濃度估計</Text>
       </View>
 
-      <TouchableOpacity
-        style={styles.bigBtn}
-        onPress={onStartCamera}
-        activeOpacity={0.85}
-      >
-        <Text style={styles.bigBtnIcon}>📸</Text>
-        <Text style={styles.bigBtnText}>進入相機</Text>
-      </TouchableOpacity>
+      <View style={{ gap: 14 }}>
+        <TouchableOpacity
+          style={styles.bigBtn}
+          onPress={onStartCamera}
+          activeOpacity={0.85}
+        >
+          <Text style={styles.bigBtnIcon}>📸</Text>
+          <Text style={styles.bigBtnText}>進入相機</Text>
+        </TouchableOpacity>
+
+        <TouchableOpacity
+          style={[styles.bigBtn, styles.bigBtnSecondary]}
+          onPress={onOpenHistory}
+          activeOpacity={0.85}
+        >
+          <Text style={styles.bigBtnIcon}>📋</Text>
+          <Text style={styles.bigBtnText}>歷史紀錄</Text>
+        </TouchableOpacity>
+      </View>
 
       <View style={styles.homeHint}>
         <Text style={styles.hintTitle}>使用方式</Text>
@@ -503,6 +542,162 @@ function CameraScreen({ onBack }) {
   );
 }
 
+// ==========================================================================
+//  歷史紀錄畫面:列出 documentDirectory 裡所有 photo_*.jpg,從檔名解出資料
+// ==========================================================================
+function HistoryScreen({ onBack }) {
+  const [photos, setPhotos] = useState([]);
+  const [sortBy, setSortBy] = useState('time');  // 'time' | 'cells'
+  const [selected, setSelected] = useState(null); // for full screen modal
+  const [loading, setLoading] = useState(true);
+
+  const loadPhotos = useCallback(async () => {
+    setLoading(true);
+    try {
+      const files = await FileSystem.readDirectoryAsync(FileSystem.documentDirectory);
+      const parsed = files
+        .filter((f) => f.startsWith('photo_') && f.endsWith('.jpg'))
+        .map((f) => {
+          const data = parseFilename(f);
+          if (!data) return null;
+          return { ...data, uri: FileSystem.documentDirectory + f };
+        })
+        .filter(Boolean);
+      setPhotos(parsed);
+    } catch (e) {
+      console.error('list photos failed:', e);
+    } finally {
+      setLoading(false);
+    }
+  }, []);
+
+  useEffect(() => { loadPhotos(); }, [loadPhotos]);
+
+  const sorted = [...photos].sort((a, b) => {
+    if (sortBy === 'cells') {
+      return (b.cellsRGB ?? 0) - (a.cellsRGB ?? 0);
+    }
+    return b.filename.localeCompare(a.filename);  // 新到舊
+  });
+
+  const handleDelete = async (item) => {
+    Alert.alert('刪除這張?', item.filename, [
+      { text: '取消', style: 'cancel' },
+      {
+        text: '刪除',
+        style: 'destructive',
+        onPress: async () => {
+          try {
+            await FileSystem.deleteAsync(item.uri, { idempotent: true });
+            setSelected(null);
+            loadPhotos();
+          } catch (e) {
+            Alert.alert('刪除失敗', String(e?.message ?? e));
+          }
+        },
+      },
+    ]);
+  };
+
+  return (
+    <View style={styles.historyRoot}>
+      <View style={styles.historyHeader}>
+        <TouchableOpacity onPress={onBack} style={styles.historyBack}>
+          <Text style={styles.historyBackText}>← 返回</Text>
+        </TouchableOpacity>
+        <Text style={styles.historyTitle}>歷史紀錄 ({photos.length})</Text>
+        <TouchableOpacity
+          style={styles.sortBtn}
+          onPress={() => setSortBy(sortBy === 'time' ? 'cells' : 'time')}
+        >
+          <Text style={styles.sortBtnText}>
+            {sortBy === 'time' ? '⏱ 時間' : '🔢 濃度'}
+          </Text>
+        </TouchableOpacity>
+      </View>
+
+      {loading ? (
+        <View style={styles.center}>
+          <Text>載入中...</Text>
+        </View>
+      ) : photos.length === 0 ? (
+        <View style={styles.center}>
+          <Text style={styles.emptyText}>還沒有照片</Text>
+          <Text style={styles.emptyHint}>回首頁按「進入相機」拍幾張就會出現</Text>
+        </View>
+      ) : (
+        <FlatList
+          data={sorted}
+          keyExtractor={(item) => item.filename}
+          renderItem={({ item }) => (
+            <TouchableOpacity
+              style={styles.histItem}
+              onPress={() => setSelected(item)}
+              activeOpacity={0.7}
+            >
+              <Image source={{ uri: item.uri }} style={styles.histThumb} />
+              <View style={styles.histText}>
+                <Text style={styles.histTime}>{item.ts}</Text>
+                <Text style={styles.histRatio}>
+                  R:{item.ratio.r.toFixed(2)} G:{item.ratio.g.toFixed(2)} B:{item.ratio.b.toFixed(2)}
+                </Text>
+                <Text style={styles.histCells}>
+                  🦠 {formatCells(item.cellsRGB ?? item.cellsR)} cells/mL
+                </Text>
+                <Text style={styles.histOd}>
+                  🌈 OD630 {item.od630?.toFixed(2) ?? '—'}  🍃 Chl-a {item.chla?.toFixed(1) ?? '—'}
+                </Text>
+              </View>
+            </TouchableOpacity>
+          )}
+          contentContainerStyle={{ paddingVertical: 8 }}
+        />
+      )}
+
+      {/* 全螢幕詳細 Modal */}
+      <Modal visible={selected != null} animationType="slide" onRequestClose={() => setSelected(null)}>
+        {selected && (
+          <View style={styles.detailRoot}>
+            <View style={styles.detailHeader}>
+              <TouchableOpacity onPress={() => setSelected(null)} style={styles.historyBack}>
+                <Text style={styles.historyBackText}>← 關閉</Text>
+              </TouchableOpacity>
+              <TouchableOpacity onPress={() => handleDelete(selected)} style={styles.deleteBtn}>
+                <Text style={styles.deleteBtnText}>🗑 刪除</Text>
+              </TouchableOpacity>
+            </View>
+            <ScrollView contentContainerStyle={styles.detailScroll}>
+              <Image source={{ uri: selected.uri }} style={styles.detailImg} resizeMode="contain" />
+              <Text style={styles.detailFilename}>{selected.filename}</Text>
+              <Text style={styles.detailLine}>📅 {selected.ts}</Text>
+              <View style={styles.detailDivider} />
+              <Text style={styles.detailSection}>色比</Text>
+              <Text style={styles.detailRow}>R:  {selected.ratio.r.toFixed(3)}</Text>
+              <Text style={styles.detailRow}>G:  {selected.ratio.g.toFixed(3)}</Text>
+              <Text style={styles.detailRow}>B:  {selected.ratio.b.toFixed(3)}</Text>
+              <View style={styles.detailDivider} />
+              <Text style={styles.detailSection}>cells/mL 預測</Text>
+              <Text style={styles.detailRow}>R-only:   {formatCells(selected.cellsR)}</Text>
+              <Text style={styles.detailRow}>RGB:      {formatCells(selected.cellsRGB)}</Text>
+              <View style={styles.detailDivider} />
+              <Text style={styles.detailSection}>OD 預測</Text>
+              <Text style={styles.detailRow}>OD630:  {selected.od630?.toFixed(3) ?? '—'}</Text>
+              <Text style={styles.detailRow}>OD664:  {selected.od664?.toFixed(3) ?? '—'}</Text>
+              <View style={styles.detailDivider} />
+              <Text style={styles.detailSection}>葉綠素</Text>
+              <Text style={styles.detailRow}>Chl-a:  {selected.chla?.toFixed(2) ?? '—'} μg/mL</Text>
+              <Text style={styles.detailRow}>Chl-b:  {selected.chlb?.toFixed(2) ?? '—'} μg/mL</Text>
+            </ScrollView>
+          </View>
+        )}
+      </Modal>
+
+      <StatusBar style="dark" />
+    </View>
+  );
+}
+
+
 function fracToStyle(frac) {
   return {
     left: `${frac.x * 100}%`,
@@ -545,6 +740,10 @@ const styles = StyleSheet.create({
     shadowOpacity: 0.3,
     shadowRadius: 8,
     shadowOffset: { width: 0, height: 4 },
+  },
+  bigBtnSecondary: {
+    backgroundColor: '#0f8b6e',
+    shadowColor: '#0f8b6e',
   },
   bigBtnIcon: {
     fontSize: 36,
@@ -715,5 +914,86 @@ const styles = StyleSheet.create({
     color: 'white',
     fontSize: 11,
     marginVertical: 1,
+  },
+
+  // 歷史紀錄
+  historyRoot: { flex: 1, backgroundColor: '#f5f7f9' },
+  historyHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingTop: 50,
+    paddingHorizontal: 12,
+    paddingBottom: 10,
+    backgroundColor: 'white',
+    borderBottomWidth: 1,
+    borderBottomColor: '#e0e0e0',
+  },
+  historyBack: { paddingVertical: 6, paddingHorizontal: 10 },
+  historyBackText: { fontSize: 16, color: '#1d4d3a', fontWeight: '600' },
+  historyTitle: {
+    flex: 1, textAlign: 'center', fontSize: 17, fontWeight: '700', color: '#1d4d3a',
+  },
+  sortBtn: {
+    paddingVertical: 6, paddingHorizontal: 10,
+    backgroundColor: '#e0f2e7', borderRadius: 6,
+  },
+  sortBtnText: { color: '#1d4d3a', fontWeight: '600', fontSize: 13 },
+  emptyText: { fontSize: 18, color: '#666', marginBottom: 8 },
+  emptyHint: { fontSize: 13, color: '#999' },
+  histItem: {
+    flexDirection: 'row',
+    backgroundColor: 'white',
+    marginHorizontal: 10,
+    marginVertical: 4,
+    padding: 10,
+    borderRadius: 8,
+    elevation: 1,
+    shadowColor: '#000',
+    shadowOpacity: 0.05,
+    shadowRadius: 3,
+  },
+  histThumb: {
+    width: 80, height: 80, borderRadius: 6,
+    backgroundColor: '#222', marginRight: 12,
+  },
+  histText: { flex: 1, justifyContent: 'center' },
+  histTime: { fontSize: 11, color: '#666', marginBottom: 2 },
+  histRatio: { fontSize: 12, color: '#aa6a00', marginBottom: 1 },
+  histCells: { fontSize: 14, fontWeight: '700', color: '#0f766e' },
+  histOd: { fontSize: 11, color: '#444', marginTop: 2 },
+
+  // 全螢幕詳細 Modal
+  detailRoot: { flex: 1, backgroundColor: '#fafafa' },
+  detailHeader: {
+    flexDirection: 'row', justifyContent: 'space-between',
+    paddingTop: 50, paddingHorizontal: 12, paddingBottom: 8,
+    backgroundColor: 'white',
+    borderBottomWidth: 1, borderBottomColor: '#e0e0e0',
+  },
+  deleteBtn: {
+    paddingVertical: 6, paddingHorizontal: 12,
+    backgroundColor: '#fee2e2', borderRadius: 6,
+  },
+  deleteBtnText: { color: '#b91c1c', fontWeight: '600', fontSize: 13 },
+  detailScroll: { padding: 16 },
+  detailImg: {
+    width: '100%', aspectRatio: 4/3,
+    backgroundColor: '#000', borderRadius: 8, marginBottom: 12,
+  },
+  detailFilename: {
+    fontSize: 11, color: '#666',
+    fontFamily: 'monospace', marginBottom: 8,
+  },
+  detailLine: { fontSize: 13, color: '#444', marginBottom: 4 },
+  detailDivider: {
+    height: 1, backgroundColor: '#e0e0e0', marginVertical: 10,
+  },
+  detailSection: {
+    fontSize: 12, fontWeight: '700', color: '#1d4d3a',
+    marginBottom: 4, letterSpacing: 1,
+  },
+  detailRow: {
+    fontSize: 14, color: '#222',
+    fontFamily: 'monospace', marginVertical: 2,
   },
 });
