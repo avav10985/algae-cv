@@ -36,7 +36,10 @@ cellpose_portable/
 # 但是手機 app 的 icon / splash 必須進 git
 !algae_app/assets/*.png
 
-# 競賽海報、構想書、產 PDF 輔助腳本(不進 git history)
+# ============================================================
+# 參考資料 — 藻類相關(海報、簡報、構想書、產出腳本)
+# 不進 git history、不出現在 對話紀錄_*.md 匯出檔內
+# ============================================================
 海報_*.html
 海報_*.pdf
 GPM*.docx
@@ -44,13 +47,23 @@ GPM*.docx
 第*頁.docx
 html_to_pdf.py
 scale_poster.py
-export_conversation.py
 algae_app/drive-download-20260506T195732Z-3-001.zip
 algae_app/drive-download-20260506T195732Z-3-001/
 
-# CO2 / 大量原始量測資料(不進 git history)
+# CO2 / 大量原始量測資料
 co2_data*.csv
 extracted_diagram.png
 preview_diagram.png
 a1ytk-*.svg
 edge_diagram.svg
+
+# ============================================================
+# 禁止進入 — 光學課程作業
+# 不屬於 algae-cv 專案,不進 git history、不出現在對話紀錄
+# ============================================================
+CH10_Diffraction.pdf
+Fabry Perot Simulation.pdf
+ch10_irradiance_derivations.md
+fabry_perot_calculation.md
+fabry_perot_simulation.py
+fp_task*.png

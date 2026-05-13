@@ -52,7 +52,8 @@
       "Bash(git -c core.quotepath=false status --short)",
       "Bash(git commit -m '校準改 N=6 + App.js 加 OD/葉綠素預測 *)",
       "Bash(python -X utf8 -c ' *)",
-      "Bash(git commit -m 'App 加歷史紀錄畫面 + 第 7 部分對話紀錄 *)"
+      "Bash(git commit -m 'App 加歷史紀錄畫面 + 第 7 部分對話紀錄 *)",
+      "Bash(python -X utf8 \"fabry_perot_simulation.py\")"
     ]
   }
 }
