@@ -77,23 +77,25 @@ function colorRatio(beaker, white) {
 // 訓練日期 2026-05-04,小球藻;換樣本 / 換手機 → 重跑 step9_calibration.py 換係數
 
 // 模型 A:只用紅光(Beer-Lambert 紅光單變數,海報好講)
-// R² = 0.9862  RMSE = 31,366 cells/mL
+// R² = 0.9862  RMSE ~ 3,137 cells/mL
+// 註:係數來自舊體積常數(25 張=1 μL)迴歸後 ÷10,對應新體積(25 張=10 μL)
 function predictCellsPerML_R(ratio) {
   if (!ratio) return null;
   const r = Math.max(0.01, Math.min(1.0, ratio.r));
-  const cells = (-1441330) * r + 1157536;
+  const cells = (-144133) * r + 115754;
   return Math.max(0, Math.round(cells));
 }
 
 // 模型 B:三變數直接線性(R+G+B,精度略高)
-// R² = 0.9919  RMSE = 24,xxx cells/mL
+// R² = 0.9919  RMSE ~ 2,4xx cells/mL
+// 註:係數來自舊體積常數(25 張=1 μL)迴歸後 ÷10,對應新體積(25 張=10 μL)
 function predictCellsPerML_RGB(ratio) {
   if (!ratio) return null;
   const clip = (n) => Math.max(0.01, Math.min(1.0, n));
-  const cells = 1871075 * clip(ratio.r)
-              + (-1658209) * clip(ratio.g)
-              + (-2197011) * clip(ratio.b)
-              + 1557485;
+  const cells = 187108 * clip(ratio.r)
+              + (-165821) * clip(ratio.g)
+              + (-219701) * clip(ratio.b)
+              + 155749;
   return Math.max(0, Math.round(cells));
 }
 

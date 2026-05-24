@@ -11,8 +11,7 @@ Step 7: 血球計數器(上室+下室)— 高解析度圖**先 downsample 到 10
 
 預設假設(同 step6):
   - 5×5 計數方格(中央 1mm² 大格)
-  - 計數體積 = 1mm × 1mm × 0.1mm = 10⁻⁴ mL
-  - 每張圖 = 1/25 microliter,25 張覆蓋 1 microliter
+  - 每室容積 = 10 microliter(10⁻² mL),每張 = 0.4 μL = 4×10⁻⁴ mL,25 張覆蓋 10 μL
   - 細胞濃度公式:總細胞數 ÷ 總微升 × 1000 × 稀釋倍率
 
 使用方式:
@@ -41,7 +40,7 @@ SQUARE_SIZE_TOL = 30       # 方格尺寸容忍誤差
 # 濃度公式(可調)
 DILUTION_FACTOR = 1.0
 IMAGES_PER_CHAMBER = 25
-VOLUME_PER_CHAMBER_ML = 1e-3
+VOLUME_PER_CHAMBER_ML = 1e-2  # 每室 10 μL(= 10⁻² mL),每張 = 10/25 μL = 0.4 μL
 VOLUME_PER_IMAGE_ML = VOLUME_PER_CHAMBER_ML / IMAGES_PER_CHAMBER
 
 
@@ -287,7 +286,7 @@ n_up = len(chamber_data['up'])
 n_down = len(chamber_data['down'])
 
 total_cells = up_sum + down_sum
-chambers_microliter = (n_up / IMAGES_PER_CHAMBER) + (n_down / IMAGES_PER_CHAMBER)
+chambers_microliter = (n_up + n_down) * VOLUME_PER_IMAGE_ML * 1000  # 實際覆蓋的 microliter 數(由體積常數推導)
 per_microliter = total_cells / chambers_microliter if chambers_microliter else 0
 final_concentration = per_microliter * 1000 * DILUTION_FACTOR
 

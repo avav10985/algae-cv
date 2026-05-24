@@ -10,8 +10,8 @@ Step 6: 血球計數器(上室+下室)完整批次
 
 預設假設:
   - 5×5 計數方格(中央 1mm² 大格)
-  - 計數體積 = 1mm × 1mm × 0.1mm = 10⁻⁴ mL
-  - 細胞濃度 (cells/mL) = L-shape計數 × 10⁴ × 稀釋倍率
+  - 每室容積 = 10 microliter(10⁻² mL),25 張覆蓋 1 室,每張 = 0.4 μL = 4×10⁻⁴ mL
+  - 最終濃度 (cells/mL) = 細胞總數 ÷ 總微升 × 1000 × 稀釋倍率
   - 稀釋倍率 = 1(沒稀釋)
 
 使用方式:
@@ -40,12 +40,12 @@ SQUARE_SIZE_TOL_FRAC = 0.05  # 方格尺寸容忍誤差(佔目標尺寸的比例
 # 濃度公式(可調)
 DILUTION_FACTOR = 1.0      # 稀釋倍率(沒稀釋=1;1:1 trypan blue=2)
 IMAGES_PER_CHAMBER = 25    # 每室預期張數(用於體積計算)
-VOLUME_PER_CHAMBER_ML = 1e-3  # 每室容積 = 1 microliter = 10⁻³ mL
+VOLUME_PER_CHAMBER_ML = 1e-2  # 每室容積 = 10 microliter = 10⁻² mL
 VOLUME_PER_IMAGE_ML = VOLUME_PER_CHAMBER_ML / IMAGES_PER_CHAMBER  # 每張圖計數體積
-# → 上下室各 1 microliter,25 張覆蓋 1 microliter,所以每張 = 1/25 microliter = 4e-5 mL
+# → 上下室各 10 microliter,25 張覆蓋 10 microliter,所以每張 = 10/25 microliter = 0.4 μL = 4e-4 mL
 # → 單張外推 cells/mL = L-shape計數 × DILUTION_FACTOR / VOLUME_PER_IMAGE_ML
 #    (假設整室都長這張的樣子推算的濃度,僅供單張比較;不是最終答案)
-# → 最終濃度 = (上 sum + 下 sum) / chambers_microliter × 1000 × DILUTION_FACTOR
+# → 最終濃度 = total_cells / total_microliter × 1000 × DILUTION_FACTOR
 #    (實際所有 L-shape 計數加總後再回推,這個才是最終答案)
 
 
@@ -287,7 +287,7 @@ n_up = len(chamber_data['up'])
 n_down = len(chamber_data['down'])
 
 total_cells = up_sum + down_sum
-chambers_microliter = (n_up / IMAGES_PER_CHAMBER) + (n_down / IMAGES_PER_CHAMBER)  # 實際覆蓋的 microliter 數
+chambers_microliter = (n_up + n_down) * VOLUME_PER_IMAGE_ML * 1000  # 實際覆蓋的 microliter 數(由體積常數推導)
 per_microliter = total_cells / chambers_microliter if chambers_microliter else 0  # 1 microliter 內的細胞數
 final_concentration = per_microliter * 1000 * DILUTION_FACTOR    # × 1000 → cells/mL
 
